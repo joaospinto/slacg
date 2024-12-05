@@ -1,5 +1,5 @@
-#include "ldlt_codegen_for_example.hpp"
-#include "mat_vec_mult_codegen_for_example.hpp"
+#include "tests/ldlt_codegen_for_example.hpp"
+#include "tests/mat_vec_mult_codegen_for_example.hpp"
 
 #include <array>
 #include <gtest/gtest.h>

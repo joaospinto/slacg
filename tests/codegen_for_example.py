@@ -2,8 +2,8 @@ import numpy as np
 
 import sys
 
-from ldlt_codegen import ldlt_codegen
-from mat_vec_mult_codegen import mat_vec_mult_codegen
+from src.slacg.ldlt_codegen import ldlt_codegen
+from src.slacg.mat_vec_mult_codegen import mat_vec_mult_codegen
 
 H = np.arange(9).reshape([3, 3])
 M = H.T @ H + np.eye(3)

@@ -1,0 +1,30 @@
+[project]
+name = "slacg"
+version = "0.0.2"
+requires-python = ">= 3.8"
+dependencies = [
+  "numpy",
+  "scipy",
+]
+authors = [
+  {name = "Joao Sousa-Pinto", email = "joaospinto@gmail.com"},
+]
+description = "Sparse Linear Algebra Code Generation"
+license = {text = "MIT License"}
+classifiers = [
+  "Programming Language :: Python :: 3",
+  "License :: OSI Approved :: MIT License",
+  "Operating System :: OS Independent",
+]
+readme = "README.md"
+
+[tool.black]
+line-length = 80
+
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project.urls]
+Homepage = "https://github.com/joaospinto/slacg"
+Issues = "https://github.com/joaospinto/slacg/issues"
