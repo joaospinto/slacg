@@ -121,16 +121,20 @@ def ldlt_codegen(M, PINV, namespace, header_name):
 
     namespace {namespace}
     {{
-    // Performs an L D L^T decomposition of the A matrix.
+    // Performs an L D L^T decomposition of the A matrix,
+    // where A_data is expected to represent np.triu(A) in CSC order.
     void ldlt(const double* A_data, double* L_data, double* D_diag);
 
-    // Solves (L + I) x = b for x, where L is strictly lower triangular.
+    // Solves (L + I) x = b for x, where L is strictly lower triangular,
+    // and where L_data is expected to represent L in CSC order.
     void solve_lower_unitriangular(const double* L_data, const double* b, double* x);
 
-    // Solves (L + I).T x = b for x, where L is strictly lower triangular.
+    // Solves (L + I).T x = b for x, where L is strictly lower triangular,
+    // and where L_data is expected to represent L in CSC order.
     void solve_upper_unitriangular(const double* L_data, const double* b, double* x);
 
-    // Solves A * x = b via an L D L^T decomposition.
+    // Solves A * x = b via an L D L^T decomposition,
+    // where A_data is expected to represent np.triu(A) in CSC order.
     void ldlt_solve(const double* A_data, const double* b, double* x);
     }}  // namespace {namespace}
     """

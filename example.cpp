@@ -1,4 +1,5 @@
 #include "ldlt_codegen_for_example.hpp"
+#include "mat_vec_mult_codegen_for_example.hpp"
 
 #include <array>
 #include <gtest/gtest.h>
@@ -16,6 +17,14 @@ TEST(SLACG, Example) {
   EXPECT_NEAR(x[0], 0.0, 1e-12);
   EXPECT_NEAR(x[1], 1.0, 1e-12);
   EXPECT_NEAR(x[2], 2.0, 1e-12);
+
+  std::array<double, 3> y{0.0, 0.0, 0.0};
+
+  slacg::example::add_upper_symmetric_Ax_to_y(Ax.data(), x.data(), y.data());
+
+  EXPECT_NEAR(y[0] - b[0], 0.0, 1e-12);
+  EXPECT_NEAR(y[1] - b[1], 0.0, 1e-12);
+  EXPECT_NEAR(y[2] - b[2], 0.0, 1e-12);
 }
 
 }  // namespace slacg::example

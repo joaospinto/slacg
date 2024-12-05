@@ -11,10 +11,23 @@ py_library(
   visibility = ["//visibility:public"],
 )
 
+py_library(
+  name = "mat_vec_mult_codegen",
+  srcs = ["mat_vec_mult_codegen.py"],
+  deps = [
+    requirement("numpy"),
+    requirement("scipy"),
+  ],
+  visibility = ["//visibility:public"],
+)
+
 py_binary(
-      name = "codegen_for_example",
-      srcs = ["codegen_for_example.py"],
-      deps = [":ldlt_codegen"]
+  name = "codegen_for_example",
+  srcs = ["codegen_for_example.py"],
+  deps = [
+    ":ldlt_codegen",
+    ":mat_vec_mult_codegen"
+  ]
 )
 
 genrule(
@@ -22,6 +35,8 @@ genrule(
   outs = [
     "ldlt_codegen_for_example.hpp",
     "ldlt_codegen_for_example.cpp",
+    "mat_vec_mult_codegen_for_example.hpp",
+    "mat_vec_mult_codegen_for_example.cpp",
   ],
   cmd = "$(location :codegen_for_example) $(RULEDIR) > /dev/null",
   tools = [":codegen_for_example"],
@@ -31,9 +46,11 @@ cc_library(
   name = "example_codegen",
   srcs = [
     "ldlt_codegen_for_example.cpp",
+    "mat_vec_mult_codegen_for_example.cpp",
   ],
   hdrs = [
     "ldlt_codegen_for_example.hpp",
+    "mat_vec_mult_codegen_for_example.hpp",
   ],
 )
 
