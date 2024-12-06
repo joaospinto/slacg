@@ -8,13 +8,13 @@ from src.slacg.mat_vec_mult_codegen import mat_vec_mult_codegen
 H = np.arange(9).reshape([3, 3])
 M = H.T @ H + np.eye(3)
 
-PINV = np.array([2, 0, 1])
+P = np.array([2, 0, 1])
 
 output_prefix = sys.argv[-1]
 
 cpp_header_code, cpp_impl_code = ldlt_codegen(
     M=M,
-    PINV=PINV,
+    P=P,
     namespace="slacg::test",
     header_name="ldlt_codegen"
 )

@@ -24,13 +24,13 @@ M = np.block([
   [G,   Zys.T,   -Sigma_inv ],
 ])
 
-PINV = np.arange(dim - 1, -1, -1)
+P = np.arange(dim - 1, -1, -1)
 
 output_prefix = sys.argv[-1]
 
 cpp_header_code, cpp_impl_code = ldlt_codegen(
     M=M,
-    PINV=PINV,
+    P=P,
     namespace="slacg::test",
     header_name="ldlt_codegen"
 )
