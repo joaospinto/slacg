@@ -15,24 +15,24 @@ output_prefix = sys.argv[-1]
 cpp_header_code, cpp_impl_code = ldlt_codegen(
         M=M,
         PINV=PINV,
-        namespace="slacg::example",
-        header_name="ldlt_codegen_for_example"
+        namespace="slacg::test",
+        header_name="ldlt_codegen"
 )
 
-with open(f"{output_prefix}/ldlt_codegen_for_example.hpp", "w") as f:
+with open(f"{output_prefix}/ldlt_codegen.hpp", "w") as f:
     f.write(cpp_header_code)
 
-with open(f"{output_prefix}/ldlt_codegen_for_example.cpp", "w") as f:
+with open(f"{output_prefix}/ldlt_codegen.cpp", "w") as f:
     f.write(cpp_impl_code)
 
 cpp_header_code, cpp_impl_code = mat_vec_mult_codegen(
         M=M,
-        namespace="slacg::example",
-        header_name="mat_vec_mult_codegen_for_example"
+        namespace="slacg::test",
+        header_name="mat_vec_mult_codegen"
 )
 
-with open(f"{output_prefix}/mat_vec_mult_codegen_for_example.hpp", "w") as f:
+with open(f"{output_prefix}/mat_vec_mult_codegen.hpp", "w") as f:
     f.write(cpp_header_code)
 
-with open(f"{output_prefix}/mat_vec_mult_codegen_for_example.cpp", "w") as f:
+with open(f"{output_prefix}/mat_vec_mult_codegen.cpp", "w") as f:
     f.write(cpp_impl_code)
