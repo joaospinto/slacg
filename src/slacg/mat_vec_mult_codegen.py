@@ -31,11 +31,17 @@ def mat_vec_mult_codegen(M, namespace, header_name):
         add_upper_symmetric_Ax_to_y_impl = ""
 
         for j in range(M.shape[1]):
-            for k in range(SPARSE_UPPER_M.indptr[j], SPARSE_UPPER_M.indptr[j+1]):
+            for k in range(
+                SPARSE_UPPER_M.indptr[j], SPARSE_UPPER_M.indptr[j + 1]
+            ):
                 i = SPARSE_UPPER_M.indices[k]
-                add_upper_symmetric_Ax_to_y_impl += f"y[{i}] += A_data[{k}] * x[{j}];\n"
+                add_upper_symmetric_Ax_to_y_impl += (
+                    f"y[{i}] += A_data[{k}] * x[{j}];\n"
+                )
                 if i != j:
-                    add_upper_symmetric_Ax_to_y_impl += f"y[{j}] += A_data[{k}] * x[{i}];\n"
+                    add_upper_symmetric_Ax_to_y_impl += (
+                        f"y[{j}] += A_data[{k}] * x[{i}];\n"
+                    )
 
         cpp_header_code += """
             // Performs y += A @ x, where A_data is expected to represent np.triu(A) in CSC order.
@@ -56,7 +62,7 @@ def mat_vec_mult_codegen(M, namespace, header_name):
         add_ATx_to_y_impl = ""
 
         for j in range(M.shape[1]):
-            for k in range(SPARSE_M.indptr[j], SPARSE_M.indptr[j+1]):
+            for k in range(SPARSE_M.indptr[j], SPARSE_M.indptr[j + 1]):
                 i = SPARSE_M.indices[k]
                 add_Ax_to_y_impl += f"y[{i}] += A_data[{k}] * x[{j}];\n"
                 add_ATx_to_y_impl += f"y[{j}] += A_data[{k}] * x[{i}];\n"

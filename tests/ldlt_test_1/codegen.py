@@ -13,10 +13,7 @@ P = np.array([2, 0, 1])
 output_prefix = sys.argv[-1]
 
 cpp_header_code, cpp_impl_code = ldlt_codegen(
-    M=M,
-    P=P,
-    namespace="slacg::test",
-    header_name="ldlt_codegen"
+    M=M, P=P, namespace="slacg::test", header_name="ldlt_codegen"
 )
 
 with open(f"{output_prefix}/ldlt_codegen.hpp", "w") as f:
@@ -26,9 +23,7 @@ with open(f"{output_prefix}/ldlt_codegen.cpp", "w") as f:
     f.write(cpp_impl_code)
 
 cpp_header_code, cpp_impl_code = mat_vec_mult_codegen(
-    M=M,
-    namespace="slacg::test",
-    header_name="mat_vec_mult_codegen"
+    M=M, namespace="slacg::test", header_name="mat_vec_mult_codegen"
 )
 
 with open(f"{output_prefix}/mat_vec_mult_codegen.hpp", "w") as f:

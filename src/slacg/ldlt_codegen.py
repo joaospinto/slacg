@@ -21,7 +21,7 @@ def _build_sparse_L(M, P):
 
     N = P_MAT @ M @ P_MAT.T
 
-    L = (np.tril(N, k=-1) != 0.0)
+    L = np.tril(N, k=-1) != 0.0
 
     # Note that The L D L^T decomposition of N can be computed with the following recursion:
     # D_i    = N_ii - sum_{j=0}^{i-1} L_{ij}^2 D_j
@@ -104,7 +104,10 @@ def ldlt_codegen(M, P, namespace, header_name):
                 # TODO(joao): remove.
                 line += "0.0"
             for k in range(j):
-                if (i, k) not in L_COORDINATE_MAP or (j, k) not in L_COORDINATE_MAP:
+                if (i, k) not in L_COORDINATE_MAP or (
+                    j,
+                    k,
+                ) not in L_COORDINATE_MAP:
                     continue
                 L_ik_idx = L_COORDINATE_MAP[(i, k)]
                 L_jk_idx = L_COORDINATE_MAP[(j, k)]
@@ -125,7 +128,9 @@ def ldlt_codegen(M, P, namespace, header_name):
             L_ij_idx = L_COORDINATE_MAP[(i, j)]
             assert L_ij_idx in L_filled
             assert j in D_filled
-            line += f" - (L_data[{L_ij_idx}] * L_data[{L_ij_idx}] * D_diag[{j}])"
+            line += (
+                f" - (L_data[{L_ij_idx}] * L_data[{L_ij_idx}] * D_diag[{j}])"
+            )
         line += ";\n"
         ldlt_impl += line
         D_filled.add(i)
