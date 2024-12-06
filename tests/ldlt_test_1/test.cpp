@@ -7,12 +7,12 @@
 namespace slacg::test {
 
 TEST(SLACG, Test) {
-  constexpr auto Ax = std::array{46., 54., 67., 63., 78., 94.};
+  constexpr auto A_data = std::array{46., 54., 67., 63., 78., 94.};
   constexpr auto b = std::array{180., 223., 266.};
 
   std::array<double, 3> x;
 
-  ldlt_solve(Ax.data(), b.data(), x.data());
+  ldlt_solve(A_data.data(), b.data(), x.data());
 
   EXPECT_NEAR(x[0], 0.0, 1e-12);
   EXPECT_NEAR(x[1], 1.0, 1e-12);
@@ -20,7 +20,7 @@ TEST(SLACG, Test) {
 
   std::array<double, 3> y{0.0, 0.0, 0.0};
 
-  add_upper_symmetric_Ax_to_y(Ax.data(), x.data(), y.data());
+  add_upper_symmetric_Ax_to_y(A_data.data(), x.data(), y.data());
 
   EXPECT_NEAR(y[0] - b[0], 0.0, 1e-12);
   EXPECT_NEAR(y[1] - b[1], 0.0, 1e-12);

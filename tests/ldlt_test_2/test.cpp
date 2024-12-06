@@ -7,7 +7,7 @@
 namespace slacg::test {
 
 TEST(SLACG, Test) {
-  constexpr auto Ax = std::array{
+  constexpr auto A_data = std::array{
     1.,  1.,  1.,  1.,  1.,  1.,  1.,  1.,  1.,  1.,  1.,  1.,  1.,
     1.,  1.,  1.,  1.,  1.,  1.,  1., -1.,  1.,  1.,  1.,  1.,  1.,
     1.,  1.,  1.,  1.,  1., -1.,  1.,  1.,  1.,  1.,  1.,  1.,  1.,
@@ -61,7 +61,7 @@ TEST(SLACG, Test) {
 
   std::array<double, 60> x;
 
-  ldlt_solve(Ax.data(), b.data(), x.data());
+  ldlt_solve(A_data.data(), b.data(), x.data());
 
   std::array<double, 60> y;
 
@@ -69,7 +69,7 @@ TEST(SLACG, Test) {
     y[i] = -b[i];
   }
 
-  slacg::test::add_upper_symmetric_Ax_to_y(Ax.data(), x.data(), y.data());
+  slacg::test::add_upper_symmetric_Ax_to_y(A_data.data(), x.data(), y.data());
 
   for (std::size_t i = 0; i < y.size(); ++i) {
     EXPECT_NEAR(y[i], 0.0, 1e-12);

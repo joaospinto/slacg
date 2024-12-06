@@ -23,7 +23,7 @@ def mat_vec_mult_codegen(M, namespace, header_name):
 
     """
 
-    M_is_symmetric = (M == M.T).all()
+    M_is_symmetric = M.shape[0] == M.shape[1] and (M == M.T).all()
 
     if M_is_symmetric:
         SPARSE_UPPER_M = sp.sparse.csc_matrix(np.triu((M != 0.0)))
