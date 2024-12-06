@@ -203,7 +203,6 @@ def ldlt_codegen(M, P, namespace, header_name):
     cpp_impl_code = f"""#include "{header_name}.hpp"
 
     #include <array>
-    #include <iostream>
 
     namespace {namespace}
     {{
@@ -226,12 +225,6 @@ def ldlt_codegen(M, P, namespace, header_name):
     std::array<double, {dim}> tmp1;
     std::array<double, {dim}> tmp2;
     ldlt(A_data, L_data.data(), D_diag.data());
-    for (std::size_t i = 0; i < {L_nnz}; ++i) {{
-        std::cout << "L_data[" << i << "] = " << L_data[i] << std::endl;
-    }}
-    for (std::size_t i = 0; i < {dim}; ++i) {{
-        std::cout << "D_diag[" << i << "] = " << D_diag[i] << std::endl;
-    }}
     {permute_b}
     solve_lower_unitriangular(L_data.data(), tmp2.data(), tmp1.data());
     for (std::size_t i = 0; i < {dim}; ++i) {{
