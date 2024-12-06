@@ -69,7 +69,7 @@ def mat_vec_mult_codegen(M, namespace, header_name):
             void add_ATx_to_y(const double* A_data, const double* x, double* y);
         """
 
-        cpp_impl_code += """
+        cpp_impl_code += f"""
             void add_Ax_to_y(const double* A_data, const double* x, double* y) {{
             {add_Ax_to_y_impl}
             }}
