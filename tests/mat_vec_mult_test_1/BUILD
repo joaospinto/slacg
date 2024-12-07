@@ -4,7 +4,7 @@ py_binary(
   name = "codegen",
   srcs = ["codegen.py"],
   deps = [
-    "//src/slacg:mat_vec_mult_codegen"
+    "//slacg:mat_vec_mult_codegen"
   ]
 )
 

@@ -2,7 +2,7 @@ import numpy as np
 
 import sys
 
-from src.slacg.mat_vec_mult_codegen import mat_vec_mult_codegen
+from slacg.mat_vec_mult_codegen import mat_vec_mult_codegen
 
 M = np.arange(5 * 10).reshape([5, 10])
 

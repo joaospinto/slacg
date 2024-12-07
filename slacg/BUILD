@@ -7,7 +7,7 @@ py_library(
   deps = [
     requirement("numpy"),
     requirement("scipy"),
-    "//src/slacg/internal:common",
+    "//slacg/internal:common",
   ],
   visibility = ["//visibility:public"],
 )
@@ -18,7 +18,7 @@ py_library(
   deps = [
     requirement("numpy"),
     requirement("scipy"),
-    "//src/slacg/internal:common",
+    "//slacg/internal:common",
   ],
   visibility = ["//visibility:public"],
 )

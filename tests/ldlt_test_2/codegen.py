@@ -2,8 +2,8 @@ import numpy as np
 
 import sys
 
-from src.slacg.ldlt_codegen import ldlt_codegen
-from src.slacg.mat_vec_mult_codegen import mat_vec_mult_codegen
+from slacg.ldlt_codegen import ldlt_codegen
+from slacg.mat_vec_mult_codegen import mat_vec_mult_codegen
 
 x_dim = 10
 y_dim = 20

@@ -4,7 +4,7 @@ py_binary(
   name = "codegen",
   srcs = ["codegen.py"],
   deps = [
-    "//src/slacg:kkt_codegen",
+    "//slacg:kkt_codegen",
   ]
 )
 

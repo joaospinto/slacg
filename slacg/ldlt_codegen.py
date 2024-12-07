@@ -1,7 +1,7 @@
 import numpy as np
 import scipy as sp
 
-from src.slacg.internal.common import build_sparse_L
+from slacg.internal.common import build_sparse_L
 
 
 # NOTE:

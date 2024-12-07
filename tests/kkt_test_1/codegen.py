@@ -2,7 +2,7 @@ import numpy as np
 
 import sys
 
-from src.slacg.kkt_codegen import kkt_codegen
+from slacg.kkt_codegen import kkt_codegen
 
 x_dim = 10
 y_dim = 20
