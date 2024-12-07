@@ -1,6 +1,8 @@
 import numpy as np
 import scipy as sp
 
+from src.slacg.internal.common import build_sparse_L
+
 
 # NOTE:
 # 1. Given a permutation P, we define the associated permutation matrix
@@ -13,32 +15,11 @@ import scipy as sp
 #    Typically, an AMD ordering is pre-computed for the sparsity pattern.
 
 
-def _build_sparse_L(M, P):
-    n = M.shape[0]
-
-    P_MAT = np.zeros_like(M)
-    P_MAT[np.arange(n), P] = 1.0
-
-    N = P_MAT @ M @ P_MAT.T
-
-    L = np.tril(N, k=-1) != 0.0
-
-    # Note that The L D L^T decomposition of N can be computed with the following recursion:
-    # D_i    = N_ii - sum_{j=0}^{i-1} L_{ij}^2 D_j
-    # L_{ij} = (1 / D_j) * (N_{ij} - sum_{k=0}^{j-1} L_{ik} L_{jk} D_k)
-
-    for i in range(n):
-        for j in range(i):
-            L[i, j] = L[i, j] or np.any(np.logical_and(L[i, :j], L[j, :j]))
-
-    return sp.sparse.csc_matrix(L)
-
-
 def ldlt_codegen(M, P, namespace, header_name):
     dim = M.shape[0]
     SPARSE_UPPER_M = sp.sparse.csc_matrix(np.triu(M))
 
-    SPARSE_L = _build_sparse_L(M=M, P=P)
+    SPARSE_L = build_sparse_L(M=M, P=P)
 
     L_nnz = SPARSE_L.nnz
 
@@ -101,7 +82,6 @@ def ldlt_codegen(M, P, namespace, header_name):
             if (i, j) in N_COORDINATE_MAP:
                 line += f"A_data[{N_COORDINATE_MAP[(i, j)]}]"
             else:
-                # TODO(joao): remove.
                 line += "0.0"
             for k in range(j):
                 if (i, k) not in L_COORDINATE_MAP or (
