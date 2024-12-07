@@ -176,6 +176,9 @@ def kkt_codegen(H, C, G, P, namespace, header_name):
     # NOTE: we need to ensure these are in increasing order to access unused values.
     L_nz_per_row = [sorted(x) for x in L_nz_set_per_row]
 
+    # NOTE: while the following can be in any order, we sort for consistency.
+    L_nz_per_col = [sorted(x) for x in L_nz_set_per_col]
+
     ldlt_impl = ""
 
     L_filled = set()
@@ -237,7 +240,7 @@ def kkt_codegen(H, C, G, P, namespace, header_name):
 
     for i in range(dim - 1, -1, -1):
         line = f"x[{i}] = b[{i}]"
-        for j in L_nz_set_per_col[i]:
+        for j in L_nz_per_col[i]:
             assert j > i
             assert (j, i) in L_COORDINATE_MAP
             L_ji_idx = L_COORDINATE_MAP[(j, i)]
