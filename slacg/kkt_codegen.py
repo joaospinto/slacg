@@ -287,7 +287,8 @@ def kkt_codegen(H, C, G, P, namespace, header_name):
     // K = [[ H  C.T  G.T]
     //      [ C  -rI   0 ]
     //      [ G   0   -S ]],
-    // where A_data is expected to represent np.triu(A) in CSC order.
+    // where H_data is expected to represent np.triu(H) in CSC order,
+    // and C_data and G_data are expected to represent C and G, respectively, in CSC order.
     // NOTE: L_data and D_diag should have sizes L_nnz={L_nnz} and dim={dim} respectively.
     void ldlt_factor(const double* H_data, const double* C_data, const double* G_data,
                      const double* s, const double r,
@@ -300,8 +301,7 @@ def kkt_codegen(H, C, G, P, namespace, header_name):
     // Adds K * x to y.
     void add_Kx_to_y(const double* H_data, const double* C_data, const double* G_data,
                      const double* s, const double r, const double* x, double* y);
-    }}  // namespace {namespace}
-    """
+    }}  // namespace {namespace}\n"""
 
     cpp_impl_code = f"""#include "{header_name}.hpp"
 
@@ -342,7 +342,6 @@ def kkt_codegen(H, C, G, P, namespace, header_name):
     {add_Kx_to_y_impl}
     }}
 
-    }} // namespace {namespace}
-    """
+    }} // namespace {namespace}\n"""
 
     return cpp_header_code, cpp_impl_code
