@@ -7,8 +7,8 @@ from slacg.internal.common import build_sparse_L
 # Generates code for solving linear systems of the form Kx = b, where
 # K = [[ H  C.T  G.T]
 #      [ C  -rI   0 ]
-#      [ G   0   -S ]].
-# H is expected to be positive definite and S is expected to be a diagonal of positive numbers.
+#      [ G   0   -W ]].
+# H is expected to be positive definite and W is expected to be a diagonal of positive numbers.
 # r is also expected to be positive.
 # The codegen interface is chosen so that factorizations can be re-used for successive solves
 # sharing the same LHS matrix.
@@ -37,12 +37,12 @@ def kkt_codegen(H, C, G, P, namespace, header_name):
     I_y = np.eye(y_dim)
     Zsy = np.zeros([s_dim, y_dim])
     Zys = Zsy.T
-    S = np.eye(s_dim)
-    # NOTE: in the code-definition of K, only the sparsity structure matters;
+    W = np.eye(s_dim)
+    # NOTE: in this code-definition of K, only the sparsity structure matters;
     #       it's irrelevant if certain blocks are off by a scalar multiplication.
     K = np.block([[H, C.T, G.T],
                   [C, I_y, Zys],
-                  [G, Zsy,  S ]])
+                  [G, Zsy,  W ]])
 
     SPARSE_L = build_sparse_L(M=K, P=P)
 
@@ -141,7 +141,7 @@ def kkt_codegen(H, C, G, P, namespace, header_name):
                         breakpoint()
                     assert i == j
                     s_i = i - x_dim - y_dim
-                    code = f"(-s[{s_i}])"
+                    code = f"(-w[{s_i}])"
             K_COORDINATE_MAP[(i, j)] = code
 
     # N_COORDINATE_MAP maps indices (i, j) of N (where i >= j)
@@ -286,12 +286,14 @@ def kkt_codegen(H, C, G, P, namespace, header_name):
     // Performs an L D L^T decomposition of the matrix (P_MAT * K * P_MAT.T), where
     // K = [[ H  C.T  G.T]
     //      [ C  -rI   0 ]
-    //      [ G   0   -S ]],
-    // where H_data is expected to represent np.triu(H) in CSC order,
-    // and C_data and G_data are expected to represent C and G, respectively, in CSC order.
+    //      [ G   0   -W ]],
+    // where:
+    // 1. H_data is expected to represent np.triu(H) in CSC order.
+    // 2. C_data and G_data are expected to represent C and G, respectively, in CSC order.
+    // 3. W is a diagonal matrix, represented by the vector of its diagonal elements, w.
     // NOTE: L_data and D_diag should have sizes L_nnz={L_nnz} and dim={dim} respectively.
     void ldlt_factor(const double* H_data, const double* C_data, const double* G_data,
-                     const double* s, const double r,
+                     const double* w, const double r,
                      double* L_data, double* D_diag);
 
     // Solves K * x = b, given a pre-computed L D L^T factorization of (P_MAT * K * P_MAT.T).
@@ -300,7 +302,7 @@ def kkt_codegen(H, C, G, P, namespace, header_name):
 
     // Adds K * x to y.
     void add_Kx_to_y(const double* H_data, const double* C_data, const double* G_data,
-                     const double* s, const double r, const double* x, double* y);
+                     const double* w, const double r, const double* x, double* y);
     }}  // namespace {namespace}\n"""
 
     cpp_impl_code = f"""#include "{header_name}.hpp"
@@ -320,7 +322,7 @@ def kkt_codegen(H, C, G, P, namespace, header_name):
     }}  // namespace
 
     void ldlt_factor(const double* H_data, const double* C_data, const double* G_data,
-                     const double* s, const double r,
+                     const double* w, const double r,
                      double* L_data, double* D_diag) {{
     {ldlt_impl}
     }}
@@ -338,7 +340,7 @@ def kkt_codegen(H, C, G, P, namespace, header_name):
     }}
 
     void add_Kx_to_y(const double* H_data, const double* C_data, const double* G_data,
-                     const double* s, const double r, const double* x, double* y) {{
+                     const double* w, const double r, const double* x, double* y) {{
     {add_Kx_to_y_impl}
     }}
 
