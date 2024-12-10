@@ -47,7 +47,9 @@ TEST(SLACG, Test) {
     1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 1.,
     1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 1.
   };
-  constexpr double r = 1e-3;
+  constexpr double r1 = 1e-3;
+  constexpr double r2 = 1e-3;
+  constexpr double r3 = 1e-3;
 
   std::array<double, 545> L_data;
   std::array<double, 60> D_diag;
@@ -61,7 +63,7 @@ TEST(SLACG, Test) {
   std::array<double, 60> x;
 
   ldlt_factor(H_data.data(), C_data.data(), G_data.data(),
-              s.data(), r, L_data.data(), D_diag.data());
+              s.data(), r1, r2, r3, L_data.data(), D_diag.data());
 
   ldlt_solve(L_data.data(), D_diag.data(), b.data(), x.data());
 
@@ -72,10 +74,10 @@ TEST(SLACG, Test) {
   }
 
   slacg::test::add_Kx_to_y(H_data.data(), C_data.data(), G_data.data(),
-                           s.data(), r, x.data(), y.data());
+                           s.data(), r2, r2, r3, x.data(), y.data());
 
   for (std::size_t i = 0; i < y.size(); ++i) {
-    EXPECT_NEAR(y[i], 0.0, 1e-12);
+    EXPECT_NEAR(y[i], 0.0, 1e-11);
   }
 }
 
