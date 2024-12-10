@@ -1,7 +1,7 @@
 import numpy as np
 import scipy as sp
 
-from slacg.internal.common import build_sparse_L
+from slacg.internal.common import build_sparse_LT
 
 
 # Generates code for solving linear systems of the form Kx = b, where
@@ -47,9 +47,9 @@ def kkt_codegen(H, C, G, P, namespace, header_name):
                   [C, I_y, Zys],
                   [G, Zsy, I_z]])
 
-    SPARSE_L = build_sparse_L(M=K, P=P)
+    SPARSE_LT = build_sparse_LT(M=K, P=P)
 
-    L_nnz = SPARSE_L.nnz
+    L_nnz = SPARSE_LT.nnz
 
     P_MAT = np.zeros_like(K)
     P_MAT[np.arange(dim), P] = 1.0
@@ -168,12 +168,14 @@ def kkt_codegen(H, C, G, P, namespace, header_name):
             assert (m, n) in K_COORDINATE_MAP
             N_COORDINATE_MAP[(i, j)] = K_COORDINATE_MAP[(m, n)]
 
+    # L_COORDINATE_MAP maps indices (i, j) of L (where i >= j)
+    # to the corresponding data coordinate of SPARSE_LT.
     L_COORDINATE_MAP = {}
     L_nz_set_per_row = [set() for _ in range(dim)]
     L_nz_set_per_col = [set() for _ in range(dim)]
-    for j in range(dim):
-        for k in range(SPARSE_L.indptr[j], SPARSE_L.indptr[j + 1]):
-            i = int(SPARSE_L.indices[k])
+    for i in range(dim):
+        for k in range(SPARSE_LT.indptr[i], SPARSE_LT.indptr[i + 1]):
+            j = int(SPARSE_LT.indices[k])
             assert i > j
             L_COORDINATE_MAP[(i, j)] = k
             L_nz_set_per_row[i].add(j)
@@ -181,13 +183,12 @@ def kkt_codegen(H, C, G, P, namespace, header_name):
 
     # NOTE: we need to ensure these are in increasing order to access unused values.
     L_nz_per_row = [sorted(x) for x in L_nz_set_per_row]
-
     # NOTE: while the following can be in any order, we sort for consistency.
     L_nz_per_col = [sorted(x) for x in L_nz_set_per_col]
 
     ldlt_impl = ""
 
-    L_filled = set()
+    LT_filled = set()
     D_filled = set()
 
     for i in range(dim):
@@ -195,35 +196,35 @@ def kkt_codegen(H, C, G, P, namespace, header_name):
             assert (i, j) in L_COORDINATE_MAP
             assert i > j
             L_ij_idx = L_COORDINATE_MAP[(i, j)]
-            line = f"L_data[{L_ij_idx}] = ("
+            line = f"    LT_data[{L_ij_idx}] = ("
             if (i, j) in N_COORDINATE_MAP:
                 line += N_COORDINATE_MAP[(i, j)]
             else:
                 line += "0.0"
-            for k in range(j):
-                if (i, k) not in L_COORDINATE_MAP or (j, k) not in L_COORDINATE_MAP:
-                    continue
+            for k in sorted(L_nz_set_per_row[i].intersection(L_nz_set_per_row[j])):
+                assert (i, k) in L_COORDINATE_MAP
+                assert (j, k) in L_COORDINATE_MAP
                 L_ik_idx = L_COORDINATE_MAP[(i, k)]
                 L_jk_idx = L_COORDINATE_MAP[(j, k)]
-                assert L_ik_idx in L_filled
-                assert L_jk_idx in L_filled
+                assert L_ik_idx in LT_filled
+                assert L_jk_idx in LT_filled
                 assert k in D_filled
-                line += f" - (L_data[{L_ik_idx}] * L_data[{L_jk_idx}] * D_diag[{k}])"
+                line += f" - (LT_data[{L_ik_idx}] * LT_data[{L_jk_idx}] * D_diag[{k}])"
             line += f") / D_diag[{j}];\n"
             ldlt_impl += line
-            L_filled.add((L_ij_idx))
+            LT_filled.add((L_ij_idx))
 
         # Update D_diag.
-        line = f"D_diag[{i}] = "
+        line = f"    D_diag[{i}] = "
         if (i, i) in N_COORDINATE_MAP:
             line += N_COORDINATE_MAP[(i, i)]
         for j in L_nz_per_row[i]:
             assert (i, j) in L_COORDINATE_MAP
             L_ij_idx = L_COORDINATE_MAP[(i, j)]
-            assert L_ij_idx in L_filled
+            assert L_ij_idx in LT_filled
             assert j in D_filled
             line += (
-                f" - (L_data[{L_ij_idx}] * L_data[{L_ij_idx}] * D_diag[{j}])"
+                f" - (LT_data[{L_ij_idx}] * LT_data[{L_ij_idx}] * D_diag[{j}])"
             )
         line += ";\n"
         ldlt_impl += line
@@ -232,26 +233,26 @@ def kkt_codegen(H, C, G, P, namespace, header_name):
     solve_lower_unitriangular_impl = ""
 
     for i in range(dim):
-        line = f"x[{i}] = b[{i}]"
+        line = f"    x[{i}] = b[{i}]"
         for j in L_nz_per_row[i]:
             assert i > j
             assert (i, j) in L_COORDINATE_MAP
             L_ij_idx = L_COORDINATE_MAP[(i, j)]
-            assert L_ij_idx in L_filled
-            line += f" - L_data[{L_ij_idx}] * x[{j}]"
+            assert L_ij_idx in LT_filled
+            line += f" - LT_data[{L_ij_idx}] * x[{j}]"
         line += ";\n"
         solve_lower_unitriangular_impl += line
 
     solve_upper_unitriangular_impl = ""
 
     for i in range(dim - 1, -1, -1):
-        line = f"x[{i}] = b[{i}]"
+        line = f"    x[{i}] = b[{i}]"
         for j in L_nz_per_col[i]:
             assert j > i
             assert (j, i) in L_COORDINATE_MAP
             L_ji_idx = L_COORDINATE_MAP[(j, i)]
-            assert L_ji_idx in L_filled
-            line += f" - L_data[{L_ji_idx}] * x[{j}]"
+            assert L_ji_idx in LT_filled
+            line += f" - LT_data[{L_ji_idx}] * x[{j}]"
         line += ";\n"
         solve_upper_unitriangular_impl += line
 
@@ -265,11 +266,11 @@ def kkt_codegen(H, C, G, P, namespace, header_name):
     #    = sum_k (P_MAT.T)[i, k] tmp2[k] = sum_k P_MAT[k, i] tmp2[k] = tmp2[PINV[i]].
     permute_b = ""
     for i in range(dim):
-        permute_b += f"tmp2[{i}] = b[{P[i]}];\n"
+        permute_b += f"    tmp2[{i}] = b[{P[i]}];\n"
 
     permute_solution = ""
     for i in range(dim):
-        permute_solution += f"x[{P[i]}] = tmp2[{i}];\n"
+        permute_solution += f"    x[{P[i]}] = tmp2[{i}];\n"
 
     add_Kx_to_y_impl = ""
     for j in range(K.shape[1]):
@@ -277,81 +278,81 @@ def kkt_codegen(H, C, G, P, namespace, header_name):
             i = SPARSE_LOWER_K.indices[k]
             assert (i, j) in K_COORDINATE_MAP
             add_Kx_to_y_impl += (
-                f"y[{i}] += {K_COORDINATE_MAP[(i, j)]} * x[{j}];\n"
+                f"    y[{i}] += {K_COORDINATE_MAP[(i, j)]} * x[{j}];\n"
             )
             if i != j:
                 add_Kx_to_y_impl += (
-                    f"y[{j}] += {K_COORDINATE_MAP[(i, j)]} * x[{i}];\n"
+                    f"    y[{j}] += {K_COORDINATE_MAP[(i, j)]} * x[{i}];\n"
                 )
 
-    cpp_header_code = f"""
-    #pragma once
+    cpp_header_code = f"""#pragma once
 
-    namespace {namespace}
-    {{
-    // Performs an L D L^T decomposition of the matrix (P_MAT * K * P_MAT.T), where
-    // K = [[ H + r1 I   C.T     G.T    ]
-    //      [    C      -r2 I     0     ]
-    //      [    G        0   -W - r3 I ]],
-    // where:
-    // 1. H_data is expected to represent np.triu(H) in CSC order.
-    // 2. C_data and G_data are expected to represent C and G, respectively, in CSC order.
-    // 3. W is a diagonal matrix, represented by the vector of its diagonal elements, w.
-    // NOTE: L_data and D_diag should have sizes L_nnz={L_nnz} and dim={dim} respectively.
-    void ldlt_factor(const double* H_data, const double* C_data, const double* G_data,
-                     const double* w, const double r1, const double r2, const double r3,
-                     double* L_data, double* D_diag);
+namespace {namespace} {{
 
-    // Solves K * x = b, given a pre-computed L D L^T factorization of (P_MAT * K * P_MAT.T).
-    // L_data and D_diag can be computed via the ldlt method defined above.
-    void ldlt_solve(const double* L_data, const double* D_diag, const double* b, double* x);
+// Performs an L D L^T decomposition of the matrix (P_MAT * K * P_MAT.T), where
+// K = [[ H + r1 I   C.T     G.T    ]
+//      [    C      -r2 I     0     ]
+//      [    G        0   -W - r3 I ]],
+// where:
+// 1. H_data is expected to represent np.triu(H) in CSC order.
+// 2. C_data and G_data are expected to represent C and G, respectively, in CSC order.
+// 3. W is a diagonal matrix, represented by the vector of its diagonal elements, w.
+// NOTE: LT_data and D_diag should have sizes L_nnz={L_nnz} and dim={dim} respectively.
+void ldlt_factor(const double* H_data, const double* C_data, const double* G_data,
+                 const double* w, const double r1, const double r2, const double r3,
+                 double* LT_data, double* D_diag);
 
-    // Adds K * x to y.
-    void add_Kx_to_y(const double* H_data, const double* C_data, const double* G_data,
-                     const double* w, const double r1, const double r2, const double r3,
-                     const double* x, double* y);
-    }}  // namespace {namespace}\n"""
+// Solves K * x = b, given a pre-computed L D L^T factorization of (P_MAT * K * P_MAT.T).
+// LT_data and D_diag can be computed via the ldlt_factor method defined above.
+void ldlt_solve(const double* LT_data, const double* D_diag, const double* b, double* x);
+
+// Adds K * x to y.
+void add_Kx_to_y(const double* H_data, const double* C_data, const double* G_data,
+                 const double* w, const double r1, const double r2, const double r3,
+                 const double* x, double* y);
+
+}}  // namespace {namespace}\n"""
 
     cpp_impl_code = f"""#include "{header_name}.hpp"
 
-    #include <array>
+#include <array>
 
-    namespace {namespace}
-    {{
-    namespace {{
-    void solve_lower_unitriangular(const double* L_data, const double* b, double* x) {{
-    {solve_lower_unitriangular_impl}
-    }}
+namespace {namespace} {{
 
-    void solve_upper_unitriangular(const double* L_data, const double* b, double* x) {{
-    {solve_upper_unitriangular_impl}
-    }}
-    }}  // namespace
+namespace {{
+void solve_lower_unitriangular(const double* LT_data, const double* b, double* x) {{
+{solve_lower_unitriangular_impl}
+}}
 
-    void ldlt_factor(const double* H_data, const double* C_data, const double* G_data,
-                     const double* w, const double r1, const double r2, const double r3,
-                     double* L_data, double* D_diag) {{
-    {ldlt_impl}
-    }}
+void solve_upper_unitriangular(const double* LT_data, const double* b, double* x) {{
+{solve_upper_unitriangular_impl}
+}}
+}}  // namespace
 
-    void ldlt_solve(const double* L_data, const double* D_diag, const double* b, double* x) {{
+void ldlt_factor(const double* H_data, const double* C_data, const double* G_data,
+                 const double* w, const double r1, const double r2, const double r3,
+                 double* LT_data, double* D_diag) {{
+{ldlt_impl}
+}}
+
+void ldlt_solve(const double* LT_data, const double* D_diag, const double* b, double* x) {{
     std::array<double, {dim}> tmp1;
     std::array<double, {dim}> tmp2;
-    {permute_b}
-    solve_lower_unitriangular(L_data, tmp2.data(), tmp1.data());
+{permute_b}
+    solve_lower_unitriangular(LT_data, tmp2.data(), tmp1.data());
     for (std::size_t i = 0; i < {dim}; ++i) {{
         tmp1[i] /= D_diag[i];
     }}
-    solve_upper_unitriangular(L_data, tmp1.data(), tmp2.data());
-    {permute_solution}
-    }}
+    solve_upper_unitriangular(LT_data, tmp1.data(), tmp2.data());
+{permute_solution}
+}}
 
-    void add_Kx_to_y(const double* H_data, const double* C_data, const double* G_data,
-                     const double* w, const double r1, const double r2, const double r3,
-                     const double* x, double* y) {{
-    {add_Kx_to_y_impl}
-    }}
+void add_Kx_to_y(const double* H_data, const double* C_data, const double* G_data,
+                 const double* w, const double r1, const double r2, const double r3,
+                 const double* x, double* y) {{
+{add_Kx_to_y_impl}
+}}
 
-    }} // namespace {namespace}\n"""
+}} // namespace {namespace}\n"""
 
     return cpp_header_code, cpp_impl_code

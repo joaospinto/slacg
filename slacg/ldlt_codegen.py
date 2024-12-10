@@ -1,7 +1,9 @@
 import numpy as np
 import scipy as sp
 
-from slacg.internal.common import build_sparse_L
+from slacg.internal.common import build_sparse_LT
+
+# TODO(joao): implement the same changes (ie L -> LT) here!
 
 
 # NOTE:
@@ -19,9 +21,9 @@ def ldlt_codegen(M, P, namespace, header_name):
     dim = M.shape[0]
     SPARSE_UPPER_M = sp.sparse.csc_matrix(np.triu(M))
 
-    SPARSE_L = build_sparse_L(M=M, P=P)
+    SPARSE_LT = build_sparse_LT(M=M, P=P)
 
-    L_nnz = SPARSE_L.nnz
+    L_nnz = SPARSE_LT.nnz
 
     P_MAT = np.zeros_like(M)
     P_MAT[np.arange(dim), P] = 1.0
@@ -58,9 +60,9 @@ def ldlt_codegen(M, P, namespace, header_name):
     L_COORDINATE_MAP = {}
     L_nz_set_per_row = [set() for _ in range(dim)]
     L_nz_set_per_col = [set() for _ in range(dim)]
-    for j in range(dim):
-        for k in range(SPARSE_L.indptr[j], SPARSE_L.indptr[j + 1]):
-            i = int(SPARSE_L.indices[k])
+    for i in range(dim):
+        for k in range(SPARSE_LT.indptr[i], SPARSE_LT.indptr[i + 1]):
+            j = int(SPARSE_LT.indices[k])
             assert i > j
             L_COORDINATE_MAP[(i, j)] = k
             L_nz_set_per_row[i].add(j)
@@ -81,29 +83,26 @@ def ldlt_codegen(M, P, namespace, header_name):
         for j in L_nz_per_row[i]:
             assert (i, j) in L_COORDINATE_MAP
             L_ij_idx = L_COORDINATE_MAP[(i, j)]
-            line = f"L_data[{L_ij_idx}] = ("
+            line = f"    LT_data[{L_ij_idx}] = ("
             if (i, j) in N_COORDINATE_MAP:
                 line += f"A_data[{N_COORDINATE_MAP[(i, j)]}]"
             else:
                 line += "0.0"
-            for k in range(j):
-                if (i, k) not in L_COORDINATE_MAP or (
-                    j,
-                    k,
-                ) not in L_COORDINATE_MAP:
-                    continue
+            for k in sorted(L_nz_set_per_row[i].intersection(L_nz_set_per_row[j])):
+                assert (i, k) in L_COORDINATE_MAP
+                assert (j, k) in L_COORDINATE_MAP
                 L_ik_idx = L_COORDINATE_MAP[(i, k)]
                 L_jk_idx = L_COORDINATE_MAP[(j, k)]
                 assert L_ik_idx in L_filled
                 assert L_jk_idx in L_filled
                 assert k in D_filled
-                line += f" - (L_data[{L_ik_idx}] * L_data[{L_jk_idx}] * D_diag[{k}])"
+                line += f" - (LT_data[{L_ik_idx}] * LT_data[{L_jk_idx}] * D_diag[{k}])"
             line += f") / D_diag[{j}];\n"
             ldlt_impl += line
             L_filled.add((L_ij_idx))
 
         # Update D_diag.
-        line = f"D_diag[{i}] = "
+        line = f"    D_diag[{i}] = "
         if (i, i) in N_COORDINATE_MAP:
             line += f"A_data[{N_COORDINATE_MAP[(i, i)]}]"
         for j in L_nz_per_row[i]:
@@ -112,7 +111,7 @@ def ldlt_codegen(M, P, namespace, header_name):
             assert L_ij_idx in L_filled
             assert j in D_filled
             line += (
-                f" - (L_data[{L_ij_idx}] * L_data[{L_ij_idx}] * D_diag[{j}])"
+                f" - (LT_data[{L_ij_idx}] * LT_data[{L_ij_idx}] * D_diag[{j}])"
             )
         line += ";\n"
         ldlt_impl += line
@@ -121,26 +120,26 @@ def ldlt_codegen(M, P, namespace, header_name):
     solve_lower_unitriangular_impl = ""
 
     for i in range(dim):
-        line = f"x[{i}] = b[{i}]"
+        line = f"    x[{i}] = b[{i}]"
         for j in L_nz_per_row[i]:
             assert i > j
             assert (i, j) in L_COORDINATE_MAP
             L_ij_idx = L_COORDINATE_MAP[(i, j)]
             assert L_ij_idx in L_filled
-            line += f" - L_data[{L_ij_idx}] * x[{j}]"
+            line += f" - LT_data[{L_ij_idx}] * x[{j}]"
         line += ";\n"
         solve_lower_unitriangular_impl += line
 
     solve_upper_unitriangular_impl = ""
 
     for i in range(dim - 1, -1, -1):
-        line = f"x[{i}] = b[{i}]"
+        line = f"    x[{i}] = b[{i}]"
         for j in L_nz_per_col[i]:
             assert j > i
             assert (j, i) in L_COORDINATE_MAP
             L_ji_idx = L_COORDINATE_MAP[(j, i)]
             assert L_ji_idx in L_filled
-            line += f" - L_data[{L_ji_idx}] * x[{j}]"
+            line += f" - LT_data[{L_ji_idx}] * x[{j}]"
         line += ";\n"
         solve_upper_unitriangular_impl += line
 
@@ -154,70 +153,55 @@ def ldlt_codegen(M, P, namespace, header_name):
     #    = sum_k (P_MAT.T)[i, k] tmp2[k] = sum_k P_MAT[k, i] tmp2[k] = tmp2[PINV[i]].
     permute_b = ""
     for i in range(dim):
-        permute_b += f"tmp2[{i}] = b[{P[i]}];\n"
+        permute_b += f"    tmp2[{i}] = b[{P[i]}];\n"
 
     permute_solution = ""
     for i in range(dim):
-        permute_solution += f"x[{P[i]}] = tmp2[{i}];\n"
+        permute_solution += f"    x[{P[i]}] = tmp2[{i}];\n"
 
-    cpp_header_code = f"""
-    #pragma once
+    cpp_header_code = f"""#pragma once
 
-    namespace {namespace}
-    {{
-    // Performs an L D L^T decomposition of the A matrix,
-    // where A_data is expected to represent np.triu(A) in CSC order.
-    void ldlt(const double* A_data, double* L_data, double* D_diag);
+namespace {namespace} {{
 
-    // Solves (L + I) x = b for x, where L is strictly lower triangular,
-    // and where L_data is expected to represent L in CSC order.
-    void solve_lower_unitriangular(const double* L_data, const double* b, double* x);
+// Performs an L D L^T decomposition of the A matrix,
+// where A_data is expected to represent np.triu(A) in CSC order.
+// NOTE: LT_data and D_diag should have sizes L_nnz={L_nnz} and dim={dim} respectively.
+void ldlt_factor(const double* A_data, double* LT_data, double* D_diag);
 
-    // Solves (L + I).T x = b for x, where L is strictly lower triangular,
-    // and where L_data is expected to represent L in CSC order.
-    void solve_upper_unitriangular(const double* L_data, const double* b, double* x);
+// Solves A * x = b, given a pre-computed L D L^T factorization of A.
+// LT_data and D_diag can be computed via the ldlt_factor method defined above.
+void ldlt_solve(const double* LT_data, const double* D_diag, const double* b, double* x);
 
-    // Solves A * x = b via an L D L^T decomposition,
-    // where A_data is expected to represent np.triu(A) in CSC order.
-    void ldlt_solve(const double* A_data, const double* b, double* x);
-    }}  // namespace {namespace}
-    """
+}}  // namespace {namespace}\n"""
 
     cpp_impl_code = f"""#include "{header_name}.hpp"
 
-    #include <array>
+#include <array>
 
-    namespace {namespace}
-    {{
+namespace {namespace} {{
 
-    void ldlt(const double* A_data, double* L_data, double* D_diag) {{
-    {ldlt_impl}
-    }}
+void ldlt_factor(const double* A_data, double* LT_data, double* D_diag) {{
+{ldlt_impl}}}
 
-    void solve_lower_unitriangular(const double* L_data, const double* b, double* x) {{
-    {solve_lower_unitriangular_impl}
-    }}
+namespace {{
+void solve_lower_unitriangular(const double* LT_data, const double* b, double* x) {{
+{solve_lower_unitriangular_impl}}}
 
-    void solve_upper_unitriangular(const double* L_data, const double* b, double* x) {{
-    {solve_upper_unitriangular_impl}
-    }}
+void solve_upper_unitriangular(const double* LT_data, const double* b, double* x) {{
+{solve_upper_unitriangular_impl}}}
+}} // namespace
 
-    void ldlt_solve(const double* A_data, const double* b, double* x) {{
-    std::array<double, {L_nnz}> L_data;
-    std::array<double, {dim}> D_diag;
+void ldlt_solve(const double* LT_data, const double* D_diag, const double* b, double* x) {{
     std::array<double, {dim}> tmp1;
     std::array<double, {dim}> tmp2;
-    ldlt(A_data, L_data.data(), D_diag.data());
-    {permute_b}
-    solve_lower_unitriangular(L_data.data(), tmp2.data(), tmp1.data());
+{permute_b}
+    solve_lower_unitriangular(LT_data, tmp2.data(), tmp1.data());
     for (std::size_t i = 0; i < {dim}; ++i) {{
         tmp1[i] /= D_diag[i];
     }}
-    solve_upper_unitriangular(L_data.data(), tmp1.data(), tmp2.data());
-    {permute_solution}
-    }}
+    solve_upper_unitriangular(LT_data, tmp1.data(), tmp2.data());
+{permute_solution}}}
 
-    }} // namespace {namespace}
-    """
+}} // namespace {namespace}\n"""
 
     return cpp_header_code, cpp_impl_code

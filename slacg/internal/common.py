@@ -2,7 +2,7 @@ import numpy as np
 import scipy as sp
 
 
-def build_sparse_L(M, P):
+def build_sparse_LT(M, P):
     n = M.shape[0]
 
     P_MAT = np.zeros_like(M)
@@ -20,4 +20,4 @@ def build_sparse_L(M, P):
         for j in range(i):
             L[i, j] = L[i, j] or np.any(np.logical_and(L[i, :j], L[j, :j]))
 
-    return sp.sparse.csc_matrix(L)
+    return sp.sparse.csc_matrix(L.T)
