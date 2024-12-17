@@ -321,19 +321,16 @@ namespace {namespace} {{
 
 namespace {{
 void solve_lower_unitriangular(const double* LT_data, const double* b, double* x) {{
-{solve_lower_unitriangular_impl}
-}}
+{solve_lower_unitriangular_impl}}}
 
 void solve_upper_unitriangular(const double* LT_data, const double* b, double* x) {{
-{solve_upper_unitriangular_impl}
-}}
+{solve_upper_unitriangular_impl}}}
 }}  // namespace
 
 void ldlt_factor(const double* H_data, const double* C_data, const double* G_data,
                  const double* w, const double r1, const double r2, const double r3,
                  double* LT_data, double* D_diag) {{
-{ldlt_impl}
-}}
+{ldlt_impl}}}
 
 void ldlt_solve(const double* LT_data, const double* D_diag, const double* b, double* x) {{
     std::array<double, {dim}> tmp1;
@@ -344,14 +341,13 @@ void ldlt_solve(const double* LT_data, const double* D_diag, const double* b, do
         tmp1[i] /= D_diag[i];
     }}
     solve_upper_unitriangular(LT_data, tmp1.data(), tmp2.data());
-{permute_solution}
-}}
+
+{permute_solution}}}
 
 void add_Kx_to_y(const double* H_data, const double* C_data, const double* G_data,
                  const double* w, const double r1, const double r2, const double r3,
                  const double* x, double* y) {{
-{add_Kx_to_y_impl}
-}}
+{add_Kx_to_y_impl}}}
 
 }} // namespace {namespace}\n"""
 
