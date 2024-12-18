@@ -32,3 +32,13 @@ py_library(
   ],
   visibility = ["//visibility:public"],
 )
+
+py_library(
+  name = "gtwg_codegen",
+  srcs = ["gtwg_codegen.py"],
+  deps = [
+    requirement("numpy"),
+    requirement("scipy"),
+  ],
+  visibility = ["//visibility:public"],
+)
