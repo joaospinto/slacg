@@ -3,7 +3,10 @@ load("@pip//:requirements.bzl", "requirement")
 
 py_library(
   name = "kkt_codegen",
-  srcs = ["kkt_codegen.py"],
+  srcs = [
+    "__init__.py",
+    "kkt_codegen.py",
+  ],
   deps = [
     requirement("numpy"),
     requirement("scipy"),
@@ -14,7 +17,10 @@ py_library(
 
 py_library(
   name = "ldlt_codegen",
-  srcs = ["ldlt_codegen.py"],
+  srcs = [
+    "__init__.py",
+    "ldlt_codegen.py",
+  ],
   deps = [
     requirement("numpy"),
     requirement("scipy"),
@@ -25,7 +31,10 @@ py_library(
 
 py_library(
   name = "mat_vec_mult_codegen",
-  srcs = ["mat_vec_mult_codegen.py"],
+  srcs = [
+    "__init__.py",
+    "mat_vec_mult_codegen.py",
+  ],
   deps = [
     requirement("numpy"),
     requirement("scipy"),
@@ -35,7 +44,10 @@ py_library(
 
 py_library(
   name = "gtwg_codegen",
-  srcs = ["gtwg_codegen.py"],
+  srcs = [
+    "__init__.py",
+    "gtwg_codegen.py",
+  ],
   deps = [
     requirement("numpy"),
     requirement("scipy"),
