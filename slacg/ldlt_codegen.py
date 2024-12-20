@@ -3,8 +3,6 @@ import scipy as sp
 
 from slacg.internal.common import build_sparse_LT
 
-# TODO(joao): implement the same changes (ie L -> LT) here!
-
 
 # NOTE:
 # 1. Given a permutation P, we define the associated permutation matrix
@@ -162,6 +160,10 @@ def ldlt_codegen(M, P, namespace, header_name):
     cpp_header_code = f"""#pragma once
 
 namespace {namespace} {{
+
+constexpr int L_nnz = {L_nnz};
+
+constexpr int dim = {dim};
 
 // Performs an L D L^T decomposition of the A matrix,
 // where A_data is expected to represent np.triu(A) in CSC order.

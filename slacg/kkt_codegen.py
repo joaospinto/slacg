@@ -289,6 +289,10 @@ def kkt_codegen(H, C, G, P, namespace, header_name):
 
 namespace {namespace} {{
 
+constexpr int L_nnz = {L_nnz};
+
+constexpr int dim = {dim};
+
 // Performs an L D L^T decomposition of the matrix (P_MAT * K * P_MAT.T), where
 // K = [[ H + r1 I   C.T     G.T    ]
 //      [    C      -r2 I     0     ]
