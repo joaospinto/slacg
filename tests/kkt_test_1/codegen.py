@@ -13,9 +13,6 @@ dim = x_dim + y_dim + s_dim
 H = np.eye(x_dim)
 C = np.ones([y_dim, x_dim])
 G = np.ones([s_dim, x_dim])
-I_y = np.eye(y_dim)
-Sigma_inv = np.eye(s_dim)
-Zys = np.zeros([y_dim, s_dim])
 
 P = np.arange(dim - 1, -1, -1)
 

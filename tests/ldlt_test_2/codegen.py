@@ -15,14 +15,14 @@ P = np.eye(x_dim)
 C = np.ones([y_dim, x_dim])
 G = np.ones([s_dim, x_dim])
 I_y = np.eye(y_dim)
-Sigma_inv = np.eye(s_dim)
+W = np.eye(s_dim)
 Zys = np.zeros([y_dim, s_dim])
 
 M = np.block(
     [
         [P, C.T, G.T],
         [C, -I_y, Zys],
-        [G, Zys.T, -Sigma_inv],
+        [G, Zys.T, -W],
     ]
 )
 
