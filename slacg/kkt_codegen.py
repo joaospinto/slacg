@@ -188,6 +188,11 @@ def kkt_codegen(H, C, G, P, namespace, header_name):
 
     ldlt_impl = ""
 
+    if y_dim == 0:
+        ldlt_impl += "    (void) C_data;\n    (void) r2;\n"
+    if z_dim == 0:
+        ldlt_impl += "    (void) G_data;\n    (void) r3;\n"
+
     LT_filled = set()
     D_filled = set()
 
@@ -273,6 +278,12 @@ def kkt_codegen(H, C, G, P, namespace, header_name):
         permute_solution += f"    x[{P[i]}] = tmp2[{i}];\n"
 
     add_Kx_to_y_impl = ""
+
+    if y_dim == 0:
+        add_Kx_to_y_impl += "    (void) C_data;\n    (void) r2;\n"
+    if z_dim == 0:
+        add_Kx_to_y_impl += "    (void) G_data;\n    (void) r3;\n"
+
     for j in range(K.shape[1]):
         for k in range(SPARSE_LOWER_K.indptr[j], SPARSE_LOWER_K.indptr[j + 1]):
             i = SPARSE_LOWER_K.indices[k]
@@ -331,9 +342,9 @@ void solve_upper_unitriangular(const double* LT_data, const double* b, double* x
 {solve_upper_unitriangular_impl}}}
 }}  // namespace
 
-void ldlt_factor(const double* H_data, const double* C_data, const double* G_data,
-                 const double* w, const double r1, const double r2, const double r3,
-                 double* LT_data, double* D_diag) {{
+void ldlt_factor(const double* H_data, const double* C_data,
+                 const double* G_data, const double* w, const double r1,
+                 const double r2, const double r3, double* LT_data, double* D_diag) {{
 {ldlt_impl}}}
 
 void ldlt_solve(const double* LT_data, const double* D_diag, const double* b, double* x) {{
@@ -348,9 +359,9 @@ void ldlt_solve(const double* LT_data, const double* D_diag, const double* b, do
 
 {permute_solution}}}
 
-void add_Kx_to_y(const double* H_data, const double* C_data, const double* G_data,
-                 const double* w, const double r1, const double r2, const double r3,
-                 const double* x, double* y) {{
+void add_Kx_to_y(const double* H_data, const double* C_data,
+                 const double* G_data, const double* w, const double r1,
+                 const double r2, const double r3, const double* x, double* y) {{
 {add_Kx_to_y_impl}}}
 
 }} // namespace {namespace}\n"""

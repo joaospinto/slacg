@@ -26,6 +26,9 @@ namespace {namespace} {{
 
         add_upper_symmetric_Ax_to_y_impl = ""
 
+        if SPARSE_UPPER_M.nnz == 0:
+            add_upper_symmetric_Ax_to_y_impl += "    (void) A_data;\n    (void) x;\n    (void) y;\n"
+
         for j in range(M.shape[1]):
             for k in range(
                 SPARSE_UPPER_M.indptr[j], SPARSE_UPPER_M.indptr[j + 1]
@@ -54,8 +57,11 @@ void add_upper_symmetric_Ax_to_y(const double* A_data, const double* x, double* 
         SPARSE_M = sp.sparse.csc_matrix((M != 0.0))
 
         add_Ax_to_y_impl = ""
-
         add_ATx_to_y_impl = ""
+
+        if SPARSE_M.nnz == 0:
+            add_Ax_to_y_impl += "    (void) A_data;\n    (void) x;\n    (void) y;\n"
+            add_ATx_to_y_impl += "    (void) A_data;\n    (void) x;\n    (void) y;\n"
 
         for j in range(M.shape[1]):
             for k in range(SPARSE_M.indptr[j], SPARSE_M.indptr[j + 1]):
