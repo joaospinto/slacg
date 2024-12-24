@@ -296,6 +296,26 @@ def kkt_codegen(H, C, G, P, namespace, header_name):
                     f"    y[{j}] += {K_COORDINATE_MAP[(i, j)]} * x[{i}];\n"
                 )
 
+    add_CTx_to_y_impl = ""
+
+    if SPARSE_C.nnz == 0:
+        add_CTx_to_y_impl += "    (void) C_data;\n    (void) x;\n    (void) y;\n"
+
+    for j in range(C.shape[1]):
+        for k in range(SPARSE_C.indptr[j], SPARSE_C.indptr[j + 1]):
+            i = SPARSE_C.indices[k]
+            add_CTx_to_y_impl += f"    y[{j}] += C_data[{k}] * x[{i}];\n"
+
+    add_GTx_to_y_impl = ""
+
+    if SPARSE_G.nnz == 0:
+        add_GTx_to_y_impl += "    (void) G_data;\n    (void) x;\n    (void) y;\n"
+
+    for j in range(G.shape[1]):
+        for k in range(SPARSE_G.indptr[j], SPARSE_G.indptr[j + 1]):
+            i = SPARSE_G.indices[k]
+            add_GTx_to_y_impl += f"    y[{j}] += G_data[{k}] * x[{i}];\n"
+
     cpp_header_code = f"""#pragma once
 
 namespace {namespace} {{
@@ -321,16 +341,55 @@ void ldlt_factor(const double* H_data, const double* C_data, const double* G_dat
 // LT_data and D_diag can be computed via the ldlt_factor method defined above.
 void ldlt_solve(const double* LT_data, const double* D_diag, const double* b, double* x);
 
-// Adds K * x to y.
+// Adds C.T @ x to y.
+void add_CTx_to_y(const double *C_data, const double *x, double *y);
+
+// Adds G.T @ x to y.
+void add_GTx_to_y(const double *G_data, const double *x, double *y);
+
+// Adds K * x to y, where
+// K = [[ H + r1 I   C.T     G.T    ]
+//      [    C      -r2 I     0     ]
+//      [    G        0   -W - r3 I ]].
 void add_Kx_to_y(const double* H_data, const double* C_data, const double* G_data,
                  const double* w, const double r1, const double r2, const double r3,
                  const double* x, double* y);
+
+// Solves Av + b = 0 for v, where:
+// 1. A = [ H + r1 I_x       0         C.T        G.T         0   ]
+//        [     0          Z / S        0         I_z         0   ]
+//        [     C            0      -r2 * I_y      0          0   ]
+//        [     G           I_z         0       -r3 I_z   (1/p) I ]
+//        [     0            0          0       (1/p) I   (1/p) I ];
+// 2. v = (dx, ds, dy, dz, p de);
+// 3. b = [ grad_f + C.T @ y + G.T @ z ]
+//        [        z - mu / s          ]
+//        [             c              ]
+//        [         g + s + e          ]
+//        [         e + z / p          ]
+// 4. (H + r1 I_x) is symmetric and positive definite;
+// 5. H_data is expected to represent np.triu(H) in CSC order.
+// 6. C_data and G_data are expected to represent C and G, respectively, in CSC order.
+// 7. S = np.diag(s);
+// 8. Z = np.diag(z);
+// 9. r1, r2, r3 are non-negative regularization parameters;
+// 10. p is the penalty term on the elastic variables;
+// 11. When elastics are inactive, p = inf and e = 0.
+void newton_kkt_solver(const double *c, const double *g, const double *grad_f,
+                       const double *H_data, const double *C_data, const double *G_data,
+                       const double *s, const double *y, const double *z, const double *e,
+                       const double mu, const double p, const double r1,
+                       const double r2, const double r3, double *dx,
+                       double *ds, double *dy, double *dz, double *de,
+                       double &kkt_error, double &lin_sys_error);
 
 }}  // namespace {namespace}\n"""
 
     cpp_impl_code = f"""#include "{header_name}.hpp"
 
+#include <algorithm>
 #include <array>
+#include <cmath>
 
 namespace {namespace} {{
 
@@ -363,6 +422,118 @@ void add_Kx_to_y(const double* H_data, const double* C_data,
                  const double* G_data, const double* w, const double r1,
                  const double r2, const double r3, const double* x, double* y) {{
 {add_Kx_to_y_impl}}}
+
+void add_CTx_to_y(const double *C_data, const double *x, double *y) {{
+{add_CTx_to_y_impl}
+}}
+
+void add_GTx_to_y(const double *G_data, const double *x, double *y) {{
+{add_GTx_to_y_impl}
+}}
+
+void newton_kkt_solver(const double *c, const double *g, const double *grad_f,
+                       const double *H_data, const double *C_data, const double *G_data,
+                       const double *s, const double *y, const double *z, const double *e,
+                       const double mu, const double p, const double r1,
+                       const double r2, const double r3, double *dx,
+                       double *ds, double *dy, double *dz, double *de,
+                       double &kkt_error, double &lin_sys_error) {{
+  std::array<double, {z_dim}> w;
+
+  for (int i = 0; i < {z_dim}; ++i) {{
+    w[i] = s[i] / z[i];
+  }}
+
+  std::array<double, {L_nnz}> LT_data;
+  std::array<double, {dim}> D_diag;
+
+  const double r3p = std::isfinite(p) ? r3 + 1.0 / p : r3;
+
+  ldlt_factor(H_data, C_data, G_data, w.data(), r1, r2, r3p,
+              LT_data.data(), D_diag.data());
+
+  std::array<double, {dim}> b;
+  double *bx = b.data();
+  double *by = bx + {x_dim};
+  double *bz = by + {y_dim};
+
+  for (int i = 0; i < {x_dim}; ++i) {{
+    bx[i] = grad_f[i];
+  }}
+
+  add_CTx_to_y(C_data, y, bx);
+  add_GTx_to_y(G_data, z, bx);
+
+  for (int i = 0; i < {y_dim}; ++i) {{
+    by[i] = c[i];
+  }}
+
+  if (std::isfinite(p)) {{
+    for (int i = 0; i < {z_dim}; ++i) {{
+      bz[i] = g[i] + mu / z[i] - z[i] / p;
+    }}
+  }} else {{
+    for (int i = 0; i < {z_dim}; ++i) {{
+      bz[i] = g[i] + mu / z[i];
+    }}
+  }}
+
+  for (int i = 0; i < {dim}; ++i) {{
+    b[i] = -b[i];
+  }}
+
+  std::array<double, {dim}> v;
+
+  ldlt_solve(LT_data.data(), D_diag.data(), b.data(), v.data());
+
+  std::array<double, {dim}> residual;
+  for (int i = 0; i < {dim}; ++i) {{
+    residual[i] = -b[i];
+  }}
+
+  add_Kx_to_y(H_data, C_data, G_data, w.data(), r1, r2, r3p, v.data(),
+              residual.data());
+
+  lin_sys_error = 0.0;
+  for (int i = 0; i < {dim}; ++i) {{
+    lin_sys_error = std::max(lin_sys_error, std::fabs(residual[i]));
+  }}
+
+  kkt_error = 0.0;
+  for (int i = 0; i < {x_dim}; ++i) {{
+    kkt_error = std::max(kkt_error, std::fabs(b[i]));
+  }}
+  for (int i = 0; i < {y_dim}; ++i) {{
+    kkt_error = std::max(kkt_error, std::fabs(c[i]));
+  }}
+  if (std::isfinite(p)) {{
+    for (int i = 0; i < {z_dim}; ++i) {{
+      kkt_error = std::max(kkt_error, std::fabs(g[i] + s[i] + e[i]));
+    }}
+  }} else {{
+    for (int i = 0; i < {z_dim}; ++i) {{
+      kkt_error = std::max(kkt_error, std::fabs(g[i] + s[i]));
+    }}
+  }}
+
+  auto it = v.begin();
+  std::copy(it, it + {x_dim}, dx);
+  it += {x_dim};
+  std::copy(it, it + {y_dim}, dy);
+  it += {y_dim};
+  std::copy(it, it + {z_dim}, dz);
+  it += {z_dim};
+
+  for (int i = 0; i < {z_dim}; ++i) {{
+    ds[i] = -w[i] * dz[i] - s[i] + mu / z[i];
+  }}
+
+  if (std::isfinite(p)) {{
+    for (int i = 0; i < {z_dim}; ++i) {{
+      de[i] = -e[i] - (dz[i] + z[i]) / p;
+    }}
+  }}
+}}
 
 }} // namespace {namespace}\n"""
 
