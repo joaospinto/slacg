@@ -11,11 +11,11 @@ from slacg.internal.common import build_sparse_LT
 #      [     C            0      -r2 * I_y      0          0   ]
 #      [     G           I_z         0       -r3 I_z   (1/p) I ]
 #      [     0            0          0       (1/p) I   (1/p) I ]];
-# through block-elimination, this is reduced to solving linear systems
-# of the form Kx = k, where
-# K = [[ H + r1 I     C.T       G.T    ]
-#      [    C        -r2 I       0     ]
-#      [    G          0     -W - r3 I ]];
+# through block-elimination (of the e- and s-blocks, i.e. 2nd and 5th),
+# this is reduced to solving linear systems of the form Kx = k, where
+# K = [[ H + r1 I_x     C.T         G.T     ]
+#      [     C        -r2 I_y        0      ]
+#      [     G           0      -W - r3 I_z ]];
 # the following properties are expected to hold:
 # 1. (H + r1 I_x) is symmetric and positive definite;
 # 2. S, Z, W are diagonal and positive definite;
@@ -43,6 +43,7 @@ def kkt_codegen(H, C, G, P, namespace, header_name):
     y_dim = C.shape[0]
     z_dim = G.shape[0]
     dim = x_dim + y_dim + z_dim
+    full_dim = dim + 2 * z_dim
     I_x = np.eye(x_dim)
     I_y = np.eye(y_dim)
     I_z = np.eye(z_dim)
@@ -284,44 +285,43 @@ def kkt_codegen(H, C, G, P, namespace, header_name):
     for i in range(dim):
         permute_solution += f"    x[{P[i]}] = tmp2[{i}];\n"
 
-    add_Kx_to_y_impl = ""
+    add_upper_symmetric_Hx_to_y_impl = ""
 
-    if y_dim == 0:
-        add_Kx_to_y_impl += "    (void) C_data;\n    (void) r2;\n"
-    if z_dim == 0:
-        add_Kx_to_y_impl += "    (void) G_data;\n    (void) r3;\n"
+    if SPARSE_UPPER_H.nnz == 0:
+        add_upper_symmetric_Hx_to_y_impl += "    (void) H_data;\n    (void) x;\n    (void) y;\n"
 
-    for j in range(K.shape[1]):
-        for k in range(SPARSE_LOWER_K.indptr[j], SPARSE_LOWER_K.indptr[j + 1]):
-            i = SPARSE_LOWER_K.indices[k]
-            assert (i, j) in K_COORDINATE_MAP
-            add_Kx_to_y_impl += (
-                f"    y[{i}] += {K_COORDINATE_MAP[(i, j)]} * x[{j}];\n"
-            )
+    for j in range(H.shape[1]):
+        for k in range(SPARSE_UPPER_H.indptr[j], SPARSE_UPPER_H.indptr[j + 1]):
+            i = SPARSE_UPPER_H.indices[k]
+            add_upper_symmetric_Hx_to_y_impl += f"    y[{i}] += H_data[{k}] * x[{j}];\n"
             if i != j:
-                add_Kx_to_y_impl += (
-                    f"    y[{j}] += {K_COORDINATE_MAP[(i, j)]} * x[{i}];\n"
-                )
+                add_upper_symmetric_Hx_to_y_impl += f"    y[{j}] += H_data[{k}] * x[{i}];\n"
 
     add_CTx_to_y_impl = ""
+    add_Cx_to_y_impl = ""
 
     if SPARSE_C.nnz == 0:
         add_CTx_to_y_impl += "    (void) C_data;\n    (void) x;\n    (void) y;\n"
+        add_Cx_to_y_impl += "    (void) C_data;\n    (void) x;\n    (void) y;\n"
 
     for j in range(C.shape[1]):
         for k in range(SPARSE_C.indptr[j], SPARSE_C.indptr[j + 1]):
             i = SPARSE_C.indices[k]
             add_CTx_to_y_impl += f"    y[{j}] += C_data[{k}] * x[{i}];\n"
+            add_Cx_to_y_impl += f"    y[{i}] += C_data[{k}] * x[{j}];\n"
 
     add_GTx_to_y_impl = ""
+    add_Gx_to_y_impl = ""
 
     if SPARSE_G.nnz == 0:
         add_GTx_to_y_impl += "    (void) G_data;\n    (void) x;\n    (void) y;\n"
+        add_Gx_to_y_impl += "    (void) G_data;\n    (void) x;\n    (void) y;\n"
 
     for j in range(G.shape[1]):
         for k in range(SPARSE_G.indptr[j], SPARSE_G.indptr[j + 1]):
             i = SPARSE_G.indices[k]
             add_GTx_to_y_impl += f"    y[{j}] += G_data[{k}] * x[{i}];\n"
+            add_Gx_to_y_impl += f"    y[{i}] += G_data[{k}] * x[{j}];\n"
 
     cpp_header_code = f"""#pragma once
 
@@ -340,27 +340,38 @@ constexpr int dim = {dim};
 // 2. C_data and G_data are expected to represent C and G, respectively, in CSC order.
 // 3. W is a diagonal matrix, represented by the vector of its diagonal elements, w.
 // NOTE: LT_data and D_diag should have sizes L_nnz={L_nnz} and dim={dim} respectively.
-void ldlt_factor(const double* H_data, const double* C_data, const double* G_data,
-                 const double* w, const double r1, const double r2, const double r3,
-                 double* LT_data, double* D_diag);
+void ldlt_factor(const double *H_data, const double *C_data, const double *G_data,
+                 const double *w, const double r1, const double r2, const double r3,
+                 double *LT_data, double *D_diag);
 
 // Solves K * x = b, given a pre-computed L D L^T factorization of (P_MAT * K * P_MAT.T).
 // LT_data and D_diag can be computed via the ldlt_factor method defined above.
-void ldlt_solve(const double* LT_data, const double* D_diag, const double* b, double* x);
+void ldlt_solve(const double *LT_data, const double *D_diag, const double *b, double *x);
+
+// Adds H @ x to y.
+void add_upper_symmetric_Hx_to_y(const double *H_data, const double *x, double *y);
 
 // Adds C.T @ x to y.
 void add_CTx_to_y(const double *C_data, const double *x, double *y);
 
+// Adds C @ x to y.
+void add_Cx_to_y(const double *C_data, const double *x, double *y);
+
 // Adds G.T @ x to y.
 void add_GTx_to_y(const double *G_data, const double *x, double *y);
+
+// Adds G @ x to y.
+void add_Gx_to_y(const double *G_data, const double *x, double *y);
 
 // Adds K * x to y, where
 // K = [[ H + r1 I   C.T     G.T    ]
 //      [    C      -r2 I     0     ]
 //      [    G        0   -W - r3 I ]].
-void add_Kx_to_y(const double* H_data, const double* C_data, const double* G_data,
-                 const double* w, const double r1, const double r2, const double r3,
-                 const double* x, double* y);
+void add_Kx_to_y(const double *H_data, const double *C_data,
+                 const double *G_data, const double *w,
+                 const double r1, const double r2, const double r3,
+                 const double *x_x, const double *x_y, const double *x_z,
+                 double *y_x, double *y_y, double *y_z);
 
 // Solves Av + b = 0 for v, where:
 // 1. A = [[ H + r1 I_x       0         C.T        G.T         0   ]
@@ -401,19 +412,19 @@ void newton_kkt_solver(const double *c, const double *g, const double *grad_f,
 namespace {namespace} {{
 
 namespace {{
-void solve_lower_unitriangular(const double* LT_data, const double* b, double* x) {{
+void solve_lower_unitriangular(const double *LT_data, const double *b, double *x) {{
 {solve_lower_unitriangular_impl}}}
 
-void solve_upper_unitriangular(const double* LT_data, const double* b, double* x) {{
+void solve_upper_unitriangular(const double *LT_data, const double *b, double *x) {{
 {solve_upper_unitriangular_impl}}}
 }}  // namespace
 
-void ldlt_factor(const double* H_data, const double* C_data,
-                 const double* G_data, const double* w, const double r1,
-                 const double r2, const double r3, double* LT_data, double* D_diag) {{
+void ldlt_factor(const double *H_data, const double *C_data,
+                 const double *G_data, const double *w, const double r1,
+                 const double r2, const double r3, double *LT_data, double *D_diag) {{
 {ldlt_impl}}}
 
-void ldlt_solve(const double* LT_data, const double* D_diag, const double* b, double* x) {{
+void ldlt_solve(const double *LT_data, const double *D_diag, const double *b, double *x) {{
     std::array<double, {dim}> tmp1;
     std::array<double, {dim}> tmp2;
 {permute_b}
@@ -425,17 +436,50 @@ void ldlt_solve(const double* LT_data, const double* D_diag, const double* b, do
 
 {permute_solution}}}
 
-void add_Kx_to_y(const double* H_data, const double* C_data,
-                 const double* G_data, const double* w, const double r1,
-                 const double r2, const double r3, const double* x, double* y) {{
-{add_Kx_to_y_impl}}}
+void add_Kx_to_y(const double *H_data, const double *C_data,
+                 const double *G_data, const double *w,
+                 const double r1, const double r2, const double r3,
+                 const double *x_x, const double *x_y, const double *x_z,
+                 double *y_x, double *y_y, double *y_z) {{
+    add_upper_symmetric_Hx_to_y(H_data, x_x, y_x);
+
+    add_CTx_to_y(C_data, x_y, y_x);
+    add_Cx_to_y(C_data, x_x, y_y);
+
+    add_GTx_to_y(G_data, x_z, y_x);
+    add_Gx_to_y(G_data, x_x, y_z);
+
+    for (int i = 0; i < {x_dim}; ++i) {{
+        y_x[i] += r1 * x_x[i];
+    }}
+
+    for (int i = 0; i < {y_dim}; ++i) {{
+      y_y[i] -= r2 * x_y[i];
+    }}
+
+    for (int i = 0; i < {z_dim}; ++i) {{
+      y_z[i] -= (w[i] + r3) * x_z[i];
+    }}
+}}
+
+void add_upper_symmetric_Hx_to_y(const double *H_data, const double *x, double *y) {{
+{add_upper_symmetric_Hx_to_y_impl}
+}}
 
 void add_CTx_to_y(const double *C_data, const double *x, double *y) {{
 {add_CTx_to_y_impl}
 }}
 
+void add_Cx_to_y(const double *C_data, const double *x, double *y) {{
+{add_Cx_to_y_impl}
+}}
+
 void add_GTx_to_y(const double *G_data, const double *x, double *y) {{
 {add_GTx_to_y_impl}
+}}
+
+void add_Gx_to_y(const double *G_data, const double *x, double *y) {{
+{add_Gx_to_y_impl}
 }}
 
 void newton_kkt_solver(const double *c, const double *g, const double *grad_f,
@@ -493,36 +537,6 @@ void newton_kkt_solver(const double *c, const double *g, const double *grad_f,
 
   ldlt_solve(LT_data.data(), D_diag.data(), b.data(), v.data());
 
-  std::array<double, {dim}> residual;
-  for (int i = 0; i < {dim}; ++i) {{
-    residual[i] = -b[i];
-  }}
-
-  add_Kx_to_y(H_data, C_data, G_data, w.data(), r1, r2, r3p, v.data(),
-              residual.data());
-
-  lin_sys_error = 0.0;
-  for (int i = 0; i < {dim}; ++i) {{
-    lin_sys_error = std::max(lin_sys_error, std::fabs(residual[i]));
-  }}
-
-  kkt_error = 0.0;
-  for (int i = 0; i < {x_dim}; ++i) {{
-    kkt_error = std::max(kkt_error, std::fabs(b[i]));
-  }}
-  for (int i = 0; i < {y_dim}; ++i) {{
-    kkt_error = std::max(kkt_error, std::fabs(c[i]));
-  }}
-  if (std::isfinite(p)) {{
-    for (int i = 0; i < {z_dim}; ++i) {{
-      kkt_error = std::max(kkt_error, std::fabs(g[i] + s[i] + e[i]));
-    }}
-  }} else {{
-    for (int i = 0; i < {z_dim}; ++i) {{
-      kkt_error = std::max(kkt_error, std::fabs(g[i] + s[i]));
-    }}
-  }}
-
   auto it = v.begin();
   std::copy(it, it + {x_dim}, dx);
   it += {x_dim};
@@ -538,6 +552,62 @@ void newton_kkt_solver(const double *c, const double *g, const double *grad_f,
   if (std::isfinite(p)) {{
     for (int i = 0; i < {z_dim}; ++i) {{
       de[i] = -e[i] - (dz[i] + z[i]) / p;
+    }}
+  }}
+
+  std::array<double, {full_dim}> residual;
+  {{
+    double* rx = residual.data();
+    double* rs = rx + {x_dim};
+    double* ry = rs + {z_dim};
+    double* rz = ry + {y_dim};
+    double* re = rz + {z_dim};
+
+    for (int i = 0; i < {x_dim}; ++i) {{
+      rx[i] = -bx[i];
+    }}
+
+    for (int i = 0; i < {y_dim}; ++i) {{
+      ry[i] = -by[i];
+    }}
+
+    for (int i = 0; i < {z_dim}; ++i) {{
+      rz[i] = -bz[i];
+    }}
+
+    add_Kx_to_y(H_data, C_data, G_data, w.data(), r1, r2, r3p,
+                dx, dy, dz, rx, ry, rz);
+
+    for (int i = 0; i < {z_dim}; ++i) {{
+      rs[i] = ds[i] / w[i] + dz[i] - mu / s[i] + z[i];
+    }}
+
+    if (std::isfinite(p)) {{
+      for (int i = 0; i < {z_dim}; ++i) {{
+        re[i] = (dz[i] + de[i] + z[i]) / p + e[i];
+      }}
+    }}
+  }}
+
+  lin_sys_error = 0.0;
+  for (int i = 0; i < {full_dim}; ++i) {{
+    lin_sys_error = std::max(lin_sys_error, std::fabs(residual[i]));
+  }}
+
+  kkt_error = 0.0;
+  for (int i = 0; i < {x_dim}; ++i) {{
+    kkt_error = std::max(kkt_error, std::fabs(bx[i]));
+  }}
+  for (int i = 0; i < {y_dim}; ++i) {{
+    kkt_error = std::max(kkt_error, std::fabs(c[i]));
+  }}
+  if (std::isfinite(p)) {{
+    for (int i = 0; i < {z_dim}; ++i) {{
+      kkt_error = std::max(kkt_error, std::fabs(g[i] + s[i] + e[i]));
+    }}
+  }} else {{
+    for (int i = 0; i < {z_dim}; ++i) {{
+      kkt_error = std::max(kkt_error, std::fabs(g[i] + s[i]));
     }}
   }}
 }}

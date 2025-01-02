@@ -1,4 +1,4 @@
-module(name = "slacg", version = "0.0.8")
+module(name = "slacg", version = "0.0.9")
 
 # Set up Python and pip.
 
