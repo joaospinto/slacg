@@ -4,19 +4,26 @@ import scipy as sp
 from slacg.internal.common import build_sparse_LT
 
 
-# Generates code for solving linear systems of the form Kx = b, where
+# This file provides utilities for generating efficient code for solving
+# Newton-KKT linear systems of the form Ax = b, where
+# A = [[ H + r1 I_x       0         C.T        G.T         0   ]
+#      [     0          Z / S        0         I_z         0   ]
+#      [     C            0      -r2 * I_y      0          0   ]
+#      [     G           I_z         0       -r3 I_z   (1/p) I ]
+#      [     0            0          0       (1/p) I   (1/p) I ]];
+# through block-elimination, this is reduced to solving linear systems
+# of the form Kx = k, where
 # K = [[ H + r1 I     C.T       G.T    ]
 #      [    C        -r2 I       0     ]
-#      [    G          0     -W - r3 I ]].
-# The following should hold:
-# 1. (H + r1 I) is positive definite.
-# 2. (W + r3 I) is diagonal and positive definite.
-# 3. r2 is a positive scalar.
-# The codegen interface is chosen so that factorizations can be re-used
-# for successive solves sharing the same LHS matrix.
-
-
-# NOTE:
+#      [    G          0     -W - r3 I ]];
+# the following properties are expected to hold:
+# 1. (H + r1 I_x) is symmetric and positive definite;
+# 2. S, Z, W are diagonal and positive definite;
+# 6. r1, r2, r3 are non-negative regularization parameters;
+# 7. p is a positive (or +inf) penalty term on the elastic variables.
+# For performance (i.e. reducing fill-in), the user should also pass
+# a permutation P so that an L D L^T decomposition of P_MAT @ K @ P_MAT.T
+# is performed (instead of directly on K). Note:
 # 1. Given a permutation P, we define the associated permutation matrix
 #    P_MAT as P_MAT[i, j] = 0 iff j = p[i]. For example, if P = (2, 0, 1),
 #    P_MAT = [[0, 0, 1],
@@ -356,11 +363,11 @@ void add_Kx_to_y(const double* H_data, const double* C_data, const double* G_dat
                  const double* x, double* y);
 
 // Solves Av + b = 0 for v, where:
-// 1. A = [ H + r1 I_x       0         C.T        G.T         0   ]
-//        [     0          Z / S        0         I_z         0   ]
-//        [     C            0      -r2 * I_y      0          0   ]
-//        [     G           I_z         0       -r3 I_z   (1/p) I ]
-//        [     0            0          0       (1/p) I   (1/p) I ];
+// 1. A = [[ H + r1 I_x       0         C.T        G.T         0   ]
+//         [     0          Z / S        0         I_z         0   ]
+//         [     C            0      -r2 * I_y      0          0   ]
+//         [     G           I_z         0       -r3 I_z   (1/p) I ]
+//         [     0            0          0       (1/p) I   (1/p) I ]];
 // 2. v = (dx, ds, dy, dz, p de);
 // 3. b = [ grad_f + C.T @ y + G.T @ z ]
 //        [        z - mu / s          ]
