@@ -400,7 +400,7 @@ void newton_kkt_solver(const double *c, const double *g, const double *grad_f,
                        const double r1, const double r2, const double r3,
                        double *dx, double *ds, double *dy, double *dz, double *de,
                        double *rx, double *rs, double *ry, double *rz, double *re,
-                       double &kkt_error, double &lin_sys_error);
+                       double &kkt_error, double *maybe_lin_sys_error);
 
 }}  // namespace {namespace}\n"""
 
@@ -490,7 +490,7 @@ void newton_kkt_solver(const double *c, const double *g, const double *grad_f,
                        const double r1, const double r2, const double r3,
                        double *dx, double *ds, double *dy, double *dz, double *de,
                        double *rx, double *rs, double *ry, double *rz, double *re,
-                       double &kkt_error, double &lin_sys_error) {{
+                       double &kkt_error, double *maybe_lin_sys_error) {{
   std::array<double, {z_dim}> w;
 
   for (int i = 0; i < {z_dim}; ++i) {{
@@ -567,8 +567,8 @@ void newton_kkt_solver(const double *c, const double *g, const double *grad_f,
     }}
   }}
 
-  std::array<double, {full_dim}> residual;
-  {{
+  if (maybe_lin_sys_error != nullptr) {{
+    std::array<double, {full_dim}> residual;
     double* res_x = residual.data();
     double* res_s = res_x + {x_dim};
     double* res_y = res_s + {z_dim};
@@ -599,12 +599,12 @@ void newton_kkt_solver(const double *c, const double *g, const double *grad_f,
         res_e[i] = (dz[i] + de[i] + z[i]) / p + e[i];
       }}
     }}
-  }}
 
-  lin_sys_error = 0.0;
+    *maybe_lin_sys_error = 0.0;
 
-  for (int i = 0; i < {full_dim}; ++i) {{
-    lin_sys_error = std::max(lin_sys_error, std::fabs(residual[i]));
+    for (int i = 0; i < {full_dim}; ++i) {{
+      *maybe_lin_sys_error = std::max(*maybe_lin_sys_error, std::fabs(residual[i]));
+    }}
   }}
 
   kkt_error = 0.0;
