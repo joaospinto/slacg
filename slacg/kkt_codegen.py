@@ -396,9 +396,10 @@ void add_Kx_to_y(const double *H_data, const double *C_data,
 void newton_kkt_solver(const double *c, const double *g, const double *grad_f,
                        const double *H_data, const double *C_data, const double *G_data,
                        const double *s, const double *y, const double *z, const double *e,
-                       const double mu, const double p, const double r1,
-                       const double r2, const double r3, double *dx,
-                       double *ds, double *dy, double *dz, double *de,
+                       const double mu, const double p,
+                       const double r1, const double r2, const double r3,
+                       double *dx, double *ds, double *dy, double *dz, double *de,
+                       double *rx, double *rs, double *ry, double *rz, double *re,
                        double &kkt_error, double &lin_sys_error);
 
 }}  // namespace {namespace}\n"""
@@ -485,9 +486,10 @@ void add_Gx_to_y(const double *G_data, const double *x, double *y) {{
 void newton_kkt_solver(const double *c, const double *g, const double *grad_f,
                        const double *H_data, const double *C_data, const double *G_data,
                        const double *s, const double *y, const double *z, const double *e,
-                       const double mu, const double p, const double r1,
-                       const double r2, const double r3, double *dx,
-                       double *ds, double *dy, double *dz, double *de,
+                       const double mu, const double p,
+                       const double r1, const double r2, const double r3,
+                       double *dx, double *ds, double *dy, double *dz, double *de,
+                       double *rx, double *rs, double *ry, double *rz, double *re,
                        double &kkt_error, double &lin_sys_error) {{
   std::array<double, {z_dim}> w;
 
@@ -515,17 +517,27 @@ void newton_kkt_solver(const double *c, const double *g, const double *grad_f,
   add_CTx_to_y(C_data, y, bx);
   add_GTx_to_y(G_data, z, bx);
 
+  std::copy(bx, bx + {x_dim}, rx);
+
   for (int i = 0; i < {y_dim}; ++i) {{
     by[i] = c[i];
   }}
 
+  std::copy(by, by + {y_dim}, ry);
+
   if (std::isfinite(p)) {{
     for (int i = 0; i < {z_dim}; ++i) {{
       bz[i] = g[i] + mu / z[i] - z[i] / p;
+      rs[i] = z[i] - mu / s[i];
+      rz[i] = g[i] + s[i] + e[i];
+      re[i] = e[i] + z[i] / p;
     }}
   }} else {{
     for (int i = 0; i < {z_dim}; ++i) {{
       bz[i] = g[i] + mu / z[i];
+      rs[i] = z[i] - mu / s[i];
+      rz[i] = g[i] + s[i];
+      re[i] = e[i];
     }}
   }}
 
@@ -557,44 +569,46 @@ void newton_kkt_solver(const double *c, const double *g, const double *grad_f,
 
   std::array<double, {full_dim}> residual;
   {{
-    double* rx = residual.data();
-    double* rs = rx + {x_dim};
-    double* ry = rs + {z_dim};
-    double* rz = ry + {y_dim};
-    double* re = rz + {z_dim};
+    double* res_x = residual.data();
+    double* res_s = res_x + {x_dim};
+    double* res_y = res_s + {z_dim};
+    double* res_z = res_y + {y_dim};
+    double* res_e = res_z + {z_dim};
 
     for (int i = 0; i < {x_dim}; ++i) {{
-      rx[i] = -bx[i];
+      res_x[i] = -bx[i];
     }}
 
     for (int i = 0; i < {y_dim}; ++i) {{
-      ry[i] = -by[i];
+      res_y[i] = -by[i];
     }}
 
     for (int i = 0; i < {z_dim}; ++i) {{
-      rz[i] = -bz[i];
+      res_z[i] = -bz[i];
     }}
 
     add_Kx_to_y(H_data, C_data, G_data, w.data(), r1, r2, r3p,
-                dx, dy, dz, rx, ry, rz);
+                dx, dy, dz, res_x, res_y, res_z);
 
     for (int i = 0; i < {z_dim}; ++i) {{
-      rs[i] = ds[i] / w[i] + dz[i] - mu / s[i] + z[i];
+      res_s[i] = ds[i] / w[i] + dz[i] - mu / s[i] + z[i];
     }}
 
     if (std::isfinite(p)) {{
       for (int i = 0; i < {z_dim}; ++i) {{
-        re[i] = (dz[i] + de[i] + z[i]) / p + e[i];
+        res_e[i] = (dz[i] + de[i] + z[i]) / p + e[i];
       }}
     }}
   }}
 
   lin_sys_error = 0.0;
+
   for (int i = 0; i < {full_dim}; ++i) {{
     lin_sys_error = std::max(lin_sys_error, std::fabs(residual[i]));
   }}
 
   kkt_error = 0.0;
+
   for (int i = 0; i < {x_dim}; ++i) {{
     kkt_error = std::max(kkt_error, std::fabs(bx[i]));
   }}
