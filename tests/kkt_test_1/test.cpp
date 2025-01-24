@@ -73,8 +73,15 @@ TEST(SLACG, Test) {
     y[i] = -b[i];
   }
 
+  double *x_x = &x[0];
+  double *x_y = &x[x_dim];
+  double *x_z = &x[x_dim + y_dim];
+  double *y_x = &y[0];
+  double *y_y = &y[x_dim];
+  double *y_z = &y[x_dim + y_dim];
+
   slacg::test::add_Kx_to_y(H_data.data(), C_data.data(), G_data.data(),
-                           s.data(), r2, r2, r3, x.data(), y.data());
+                           s.data(), r2, r2, r3, x_x, x_y, x_z, y_x, y_y, y_z);
 
   for (std::size_t i = 0; i < y.size(); ++i) {
     EXPECT_NEAR(y[i], 0.0, 1e-11);
