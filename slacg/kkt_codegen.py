@@ -209,11 +209,9 @@ def kkt_codegen(H, C, G, P, namespace, header_name):
             assert (i, j) in L_COORDINATE_MAP
             assert i > j
             L_ij_idx = L_COORDINATE_MAP[(i, j)]
-            line = f"    LT_data[{L_ij_idx}] = ("
+            line = f"    LT_data[{L_ij_idx}] = "
             if (i, j) in N_COORDINATE_MAP:
                 line += N_COORDINATE_MAP[(i, j)]
-            else:
-                line += "0.0"
             for k in sorted(L_nz_set_per_row[i].intersection(L_nz_set_per_row[j])):
                 assert (i, k) in L_COORDINATE_MAP
                 assert (j, k) in L_COORDINATE_MAP
@@ -222,26 +220,28 @@ def kkt_codegen(H, C, G, P, namespace, header_name):
                 assert L_ik_idx in LT_filled
                 assert L_jk_idx in LT_filled
                 assert k in D_filled
-                line += f" - (LT_data[{L_ik_idx}] * LT_data[{L_jk_idx}] * D_diag[{k}])"
-            line += f") / D_diag[{j}];\n"
+                line += f" - (LT_data[{L_ik_idx}] * LT_data[{L_jk_idx}])"
+            line += f";\n"
             ldlt_impl += line
             LT_filled.add((L_ij_idx))
 
-        # Update D_diag.
+        # Update D_diag and finalize column of LT.
         line = f"    D_diag[{i}] = "
         if (i, i) in N_COORDINATE_MAP:
-            line += N_COORDINATE_MAP[(i, i)]
+            line += f"{N_COORDINATE_MAP[(i, i)]};\n"
+        else:
+            line += f"0.0;\n"
+        ldlt_impl += line
+        D_filled.add(i)
         for j in L_nz_per_row[i]:
             assert (i, j) in L_COORDINATE_MAP
             L_ij_idx = L_COORDINATE_MAP[(i, j)]
             assert L_ij_idx in LT_filled
             assert j in D_filled
-            line += (
-                f" - (LT_data[{L_ij_idx}] * LT_data[{L_ij_idx}] * D_diag[{j}])"
-            )
-        line += ";\n"
-        ldlt_impl += line
-        D_filled.add(i)
+            line = f"    D_diag[{i}] -= LT_data[{L_ij_idx}] * (LT_data[{L_ij_idx}] / D_diag[{j}]);\n"
+            ldlt_impl += line
+            line = f"    LT_data[{L_ij_idx}] /= D_diag[{j}];\n"
+            ldlt_impl += line
 
     solve_lower_unitriangular_impl = ""
 
@@ -330,6 +330,9 @@ namespace {namespace} {{
 constexpr int L_nnz = {L_nnz};
 
 constexpr int dim = {dim};
+constexpr int x_dim = {x_dim};
+constexpr int y_dim = {y_dim};
+constexpr int z_dim = {z_dim};
 
 // Performs an L D L^T decomposition of the matrix (P_MAT * K * P_MAT.T), where
 // K = [[ H + r1 I   C.T     G.T    ]

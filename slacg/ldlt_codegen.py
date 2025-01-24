@@ -81,11 +81,9 @@ def ldlt_codegen(M, P, namespace, header_name):
         for j in L_nz_per_row[i]:
             assert (i, j) in L_COORDINATE_MAP
             L_ij_idx = L_COORDINATE_MAP[(i, j)]
-            line = f"    LT_data[{L_ij_idx}] = ("
+            line = f"    LT_data[{L_ij_idx}] = "
             if (i, j) in N_COORDINATE_MAP:
                 line += f"A_data[{N_COORDINATE_MAP[(i, j)]}]"
-            else:
-                line += "0.0"
             for k in sorted(L_nz_set_per_row[i].intersection(L_nz_set_per_row[j])):
                 assert (i, k) in L_COORDINATE_MAP
                 assert (j, k) in L_COORDINATE_MAP
@@ -94,26 +92,28 @@ def ldlt_codegen(M, P, namespace, header_name):
                 assert L_ik_idx in L_filled
                 assert L_jk_idx in L_filled
                 assert k in D_filled
-                line += f" - (LT_data[{L_ik_idx}] * LT_data[{L_jk_idx}] * D_diag[{k}])"
-            line += f") / D_diag[{j}];\n"
+                line += f" - (LT_data[{L_ik_idx}] * LT_data[{L_jk_idx}])"
+            line += f";\n"
             ldlt_impl += line
             L_filled.add((L_ij_idx))
 
-        # Update D_diag.
+        # Update D_diag and finalize column of LT.
         line = f"    D_diag[{i}] = "
         if (i, i) in N_COORDINATE_MAP:
-            line += f"A_data[{N_COORDINATE_MAP[(i, i)]}]"
+            line += f"A_data[{N_COORDINATE_MAP[(i, i)]}];\n"
+        else:
+            line += f"0.0;\n"
+        ldlt_impl += line
+        D_filled.add(i)
         for j in L_nz_per_row[i]:
             assert (i, j) in L_COORDINATE_MAP
             L_ij_idx = L_COORDINATE_MAP[(i, j)]
             assert L_ij_idx in L_filled
             assert j in D_filled
-            line += (
-                f" - (LT_data[{L_ij_idx}] * LT_data[{L_ij_idx}] * D_diag[{j}])"
-            )
-        line += ";\n"
-        ldlt_impl += line
-        D_filled.add(i)
+            line = f"    D_diag[{i}] -= LT_data[{L_ij_idx}] * (LT_data[{L_ij_idx}] / D_diag[{j}]);\n"
+            ldlt_impl += line
+            line = f"    LT_data[{L_ij_idx}] /= D_diag[{j}];\n"
+            ldlt_impl += line
 
     solve_lower_unitriangular_impl = ""
 
