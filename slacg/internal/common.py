@@ -1,7 +1,6 @@
 import numpy as np
 import scipy as sp
 
-
 def build_sparse_LT(M, P):
     n = M.shape[0]
 
@@ -9,15 +8,22 @@ def build_sparse_LT(M, P):
     P_MAT[np.arange(n), P] = 1.0
 
     N = P_MAT @ M @ P_MAT.T
+    U = N != 0
 
-    L = np.tril(N, k=-1) != 0.0
+    nonzero_rows_per_col = [set() for _ in range(U.shape[1])]
+    for col in range(U.shape[1]):
+        for row in range(col):
+            if U[row, col] or nonzero_rows_per_col[row].intersection(nonzero_rows_per_col[col]):
+                nonzero_rows_per_col[col].add(row)
 
-    # Note that The L D L^T decomposition of N can be computed with the following recursion:
-    # D_i    = N_ii - sum_{j=0}^{i-1} L_{ij}^2 D_j
-    # L_{ij} = (1 / D_j) * (N_{ij} - sum_{k=0}^{j-1} L_{ik} L_{jk} D_k)
+    csc_rows = []
+    csc_cols = []
+    csc_values = []
 
-    for i in range(n):
-        for j in range(i):
-            L[i, j] = L[i, j] or np.any(np.logical_and(L[i, :j], L[j, :j]))
+    for col, row_set in enumerate(nonzero_rows_per_col):
+        if row_set:
+            csc_rows.extend(list(row_set))
+            csc_cols.extend([col] * len(row_set))
+            csc_values.extend([True] * len(row_set))
 
-    return sp.sparse.csc_matrix(L.T)
+    return sp.sparse.csc_matrix((csc_values, (csc_rows, csc_cols)), shape=U.shape)
