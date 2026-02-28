@@ -7,7 +7,7 @@ dependencies = [
   "scipy",
 ]
 authors = [
-  {name = "Joao Sousa-Pinto", email = "joaospinto@gmail.com"},
+  {name = "<redacted>", email = "<redacted>"},
 ]
 description = "Sparse Linear Algebra Code Generation"
 license = {text = "MIT License"}
@@ -26,5 +26,5 @@ requires = ["setuptools>=61.0"]
 build-backend = "setuptools.build_meta"
 
 [project.urls]
-Homepage = "https://github.com/joaospinto/slacg"
-Issues = "https://github.com/joaospinto/slacg/issues"
+Homepage = "<redacted>"
+Issues = "<redacted>"
