@@ -12,25 +12,22 @@ def gtwg_codegen(G, namespace, header_name):
 
     SPARSE_GTG = sp.sparse.triu(GTG, format="csc")
 
-    # Maps (i, j) to the index of G.data representing G[i, j].
-    G_COORDINATE_MAP = {}
+    # Maps (i, j), where i <= j, to the corresponding output coordinate.
+    GTG_COORDINATE_MAP = {}
+    for j in range(SPARSE_GTG.shape[1]):
+        for k in range(SPARSE_GTG.indptr[j], SPARSE_GTG.indptr[j + 1]):
+            i = int(SPARSE_GTG.indices[k])
+            GTG_COORDINATE_MAP[(i, j)] = k
+
+    # Maps each row h to the nonzero entries (j, G_data index) in that row.
+    G_NZ_PER_ROW = [[] for _ in range(G.shape[0])]
     for j in range(G.shape[1]):
         for k in range(SPARSE_G.indptr[j], SPARSE_G.indptr[j + 1]):
-            i = SPARSE_G.indices[k]
-            G_COORDINATE_MAP[(i, j)] = k
+            i = int(SPARSE_G.indices[k])
+            G_NZ_PER_ROW[i].append((j, k))
 
-    rows_by_col = []
-    for j in range(G.shape[1]):
-        rows = SPARSE_G.indices[SPARSE_G.indptr[j] : SPARSE_G.indptr[j + 1]]
-        rows_by_col.append(set(int(row) for row in rows))
-
-    # Maps (j, k), where j >= k, to {i | G_ij != 0 and G_ik != 0}
-    GTG_MAP = {}
-    for j in range(G.shape[1]):
-        for k in range(j + 1):
-            i_nz = sorted(rows_by_col[j].intersection(rows_by_col[k]))
-            GTG_MAP[(j, k)] = i_nz
-            GTG_MAP[(k, j)] = i_nz
+    for row in G_NZ_PER_ROW:
+        row.sort()
 
     cpp_header_code = f"""
 #pragma once
@@ -48,16 +45,33 @@ namespace {namespace} {{
 
     gt_w_g_impl = ""
 
-    for j in range(SPARSE_GTG.shape[1]):
-        for k in range(SPARSE_GTG.indptr[j], SPARSE_GTG.indptr[j + 1]):
-            line = f"    gt_w_g[{k}] = 0.0"
-            i = SPARSE_GTG.indices[k]
-            for h in GTG_MAP[(i, j)]:
-                G_hi = G_COORDINATE_MAP[(h, i)]
-                G_hj = G_COORDINATE_MAP[(h, j)]
-                line += f" + G_data[{G_hi}] * (w[{h}] + r) * G_data[{G_hj}]"
-            line += ";\n"
-            gt_w_g_impl += line
+    if SPARSE_GTG.nnz == 0:
+        gt_w_g_impl += (
+            "    (void) G_data;\n"
+            "    (void) w;\n"
+            "    (void) r;\n"
+            "    (void) gt_w_g;\n"
+        )
+    else:
+        for k in range(SPARSE_GTG.nnz):
+            gt_w_g_impl += f"    double gt_w_g_{k} = 0.0;\n"
+
+        for h, row in enumerate(G_NZ_PER_ROW):
+            if not row:
+                continue
+            gt_w_g_impl += f"    const double scale_{h} = w[{h}] + r;\n"
+            for a, (i, G_hi) in enumerate(row):
+                for j, G_hj in row[a:]:
+                    assert i <= j
+                    assert (i, j) in GTG_COORDINATE_MAP
+                    output_idx = GTG_COORDINATE_MAP[(i, j)]
+                    gt_w_g_impl += (
+                        f"    gt_w_g_{output_idx} += "
+                        f"G_data[{G_hi}] * scale_{h} * G_data[{G_hj}];\n"
+                    )
+
+        for k in range(SPARSE_GTG.nnz):
+            gt_w_g_impl += f"    gt_w_g[{k}] = gt_w_g_{k};\n"
 
     cpp_header_code += """
 // Computes G.T @ (W + r I) @ G in CSC format, where:
