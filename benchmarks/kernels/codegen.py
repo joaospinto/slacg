@@ -1,6 +1,7 @@
 import sys
 
 import numpy as np
+import scipy as sp
 
 from slacg.gtwg_codegen import gtwg_codegen
 from slacg.kkt_codegen import kkt_codegen
@@ -14,7 +15,7 @@ def banded_spd(dim, half_bandwidth):
         value = 1.0 / (offset + 1)
         M += np.diag(np.full(dim - offset, value), offset)
         M += np.diag(np.full(dim - offset, value), -offset)
-    return M
+    return sp.sparse.csc_matrix(M)
 
 
 def sparse_pattern(rows, cols, entries_per_col):
@@ -23,7 +24,7 @@ def sparse_pattern(rows, cols, entries_per_col):
         for offset in range(entries_per_col):
             row = (3 * col + 5 * offset) % rows
             M[row, col] = 1.0
-    return M
+    return sp.sparse.csc_matrix(M)
 
 
 output_prefix = sys.argv[-1]

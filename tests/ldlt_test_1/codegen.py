@@ -1,4 +1,5 @@
 import numpy as np
+import scipy as sp
 
 import sys
 
@@ -6,7 +7,7 @@ from slacg.ldlt_codegen import ldlt_codegen
 from slacg.mat_vec_mult_codegen import mat_vec_mult_codegen
 
 H = np.arange(9).reshape([3, 3])
-M = H.T @ H + np.eye(3)
+M = sp.sparse.csc_matrix(H.T @ H + np.eye(3))
 
 P = np.array([2, 0, 1])
 

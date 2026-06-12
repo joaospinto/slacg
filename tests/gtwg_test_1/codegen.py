@@ -1,10 +1,11 @@
 import numpy as np
+import scipy as sp
 
 import sys
 
 from slacg.gtwg_codegen import gtwg_codegen
 
-G = np.arange(5 * 10).reshape([5, 10])
+G = sp.sparse.csc_matrix(np.arange(5 * 10).reshape([5, 10]))
 
 output_prefix = sys.argv[-1]
 

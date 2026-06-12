@@ -1,10 +1,11 @@
 import numpy as np
+import scipy as sp
 
 import sys
 
 from slacg.mat_vec_mult_codegen import mat_vec_mult_codegen
 
-M = np.arange(5 * 10).reshape([5, 10])
+M = sp.sparse.csc_matrix(np.arange(5 * 10).reshape([5, 10]))
 
 output_prefix = sys.argv[-1]
 

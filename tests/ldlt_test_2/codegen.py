@@ -1,4 +1,5 @@
 import numpy as np
+import scipy as sp
 
 import sys
 
@@ -11,19 +12,20 @@ s_dim = 30
 
 dim = x_dim + y_dim + s_dim
 
-P = np.eye(x_dim)
-C = np.ones([y_dim, x_dim])
-G = np.ones([s_dim, x_dim])
-I_y = np.eye(y_dim)
-W = np.eye(s_dim)
-Zys = np.zeros([y_dim, s_dim])
+P_mat = sp.sparse.eye(x_dim, format="csc")
+C = sp.sparse.csc_matrix(np.ones([y_dim, x_dim]))
+G = sp.sparse.csc_matrix(np.ones([s_dim, x_dim]))
+I_y = sp.sparse.eye(y_dim, format="csc")
+W = sp.sparse.eye(s_dim, format="csc")
+Zys = sp.sparse.csc_matrix((y_dim, s_dim))
 
-M = np.block(
+M = sp.sparse.bmat(
     [
-        [P, C.T, G.T],
+        [P_mat, C.T, G.T],
         [C, -I_y, Zys],
         [G, Zys.T, -W],
-    ]
+    ],
+    format="csc",
 )
 
 P = np.arange(dim - 1, -1, -1)

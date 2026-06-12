@@ -1,15 +1,16 @@
-import numpy as np
 import scipy as sp
 
 
 def gtwg_codegen(G, namespace, header_name):
+    assert sp.sparse.issparse(G)
     assert len(G.shape) == 2
 
-    SPARSE_G = sp.sparse.csc_matrix(G)
+    SPARSE_G = G.tocsc(copy=True)
+    SPARSE_G.eliminate_zeros()
 
-    GTG = G.T @ G
+    GTG = SPARSE_G.T @ SPARSE_G
 
-    SPARSE_GTG = sp.sparse.csc_matrix(np.triu(GTG))
+    SPARSE_GTG = sp.sparse.triu(GTG, format="csc")
 
     # Maps (i, j) to the index of G.data representing G[i, j].
     G_COORDINATE_MAP = {}
@@ -18,11 +19,16 @@ def gtwg_codegen(G, namespace, header_name):
             i = SPARSE_G.indices[k]
             G_COORDINATE_MAP[(i, j)] = k
 
+    rows_by_col = []
+    for j in range(G.shape[1]):
+        rows = SPARSE_G.indices[SPARSE_G.indptr[j] : SPARSE_G.indptr[j + 1]]
+        rows_by_col.append(set(int(row) for row in rows))
+
     # Maps (j, k), where j >= k, to {i | G_ij != 0 and G_ik != 0}
     GTG_MAP = {}
     for j in range(G.shape[1]):
         for k in range(j + 1):
-            i_nz = [i for i in range(G.shape[0]) if G[i, j] != 0.0 and G[i, k] != 0.0]
+            i_nz = sorted(rows_by_col[j].intersection(rows_by_col[k]))
             GTG_MAP[(j, k)] = i_nz
             GTG_MAP[(k, j)] = i_nz
 

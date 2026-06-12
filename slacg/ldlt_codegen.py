@@ -16,23 +16,23 @@ from slacg.internal.common import build_sparse_LT
 
 
 def ldlt_codegen(M, P, namespace, header_name):
+    assert sp.sparse.issparse(M)
+
+    M = M.tocsc(copy=True)
+    M.eliminate_zeros()
     dim = M.shape[0]
-    SPARSE_UPPER_M = sp.sparse.csc_matrix(np.triu(M))
+    P = np.asarray(P, dtype=int)
+    SPARSE_UPPER_M = sp.sparse.triu(M, format="csc")
 
     SPARSE_LT = build_sparse_LT(M=M, P=P)
 
     L_nnz = SPARSE_LT.nnz
 
-    P_MAT = np.zeros_like(M)
-    P_MAT[np.arange(dim), P] = 1.0
-
-    N = P_MAT @ M @ P_MAT.T
+    N = M.tocsr()[P, :][:, P].tocsc()
 
     # NOTE:
     # 1. P_MAT[i, j] = 0 iff j = P[i]
-    # 2. N[i, j] = (P_MAT M P_MAT.T)[i, j] = sum_k (P_MAT M)[i, k] (P_MAT.T)[k, j]
-    #            = sum_k (P_MAT M)[i, k] P_MAT[j, k] = (P_MAT M)[i, P[j]]
-    #            = sum_k P_MAT[i, k] M[k, P[j]] = M[P[i], P[j]]
+    # 2. N[i, j] = (P_MAT M P_MAT.T)[i, j] = M[P[i], P[j]]
     # 3. M[i, j] = N[PINV[i], PINV[j]]
 
     PINV = np.zeros_like(P)

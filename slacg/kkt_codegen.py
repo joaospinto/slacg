@@ -28,45 +28,50 @@ from slacg.internal.common import build_sparse_LT
 
 
 def kkt_codegen(H, C, G, P, namespace, header_name):
+    assert sp.sparse.issparse(H)
+    assert sp.sparse.issparse(C)
+    assert sp.sparse.issparse(G)
     assert len(H.shape) == 2
     assert len(C.shape) == 2
     assert len(G.shape) == 2
-    assert (H == H.T).all()
+    H = H.tocsc(copy=True)
+    C = C.tocsc(copy=True)
+    G = G.tocsc(copy=True)
+    H.eliminate_zeros()
+    C.eliminate_zeros()
+    G.eliminate_zeros()
+    assert (H != H.T).nnz == 0
+    P = np.asarray(P, dtype=int)
     x_dim = H.shape[0]
     y_dim = C.shape[0]
     z_dim = G.shape[0]
     dim = x_dim + y_dim + z_dim
-    I_x = np.eye(x_dim)
-    I_y = np.eye(y_dim)
-    I_z = np.eye(z_dim)
-    Zsy = np.zeros([z_dim, y_dim])
+    I_x = sp.sparse.eye(x_dim, format="csc")
+    I_y = sp.sparse.eye(y_dim, format="csc")
+    I_z = sp.sparse.eye(z_dim, format="csc")
+    Zsy = sp.sparse.csc_matrix((z_dim, y_dim))
     Zys = Zsy.T
-    H = np.abs(H) + I_x
+    H = abs(H) + I_x
     # NOTE: only the sparsity patterns matter here.
-    K = np.block([[H, C.T, G.T],
-                  [C, I_y, Zys],
-                  [G, Zsy, I_z]])
+    K = sp.sparse.bmat(
+        [[H, C.T, G.T], [C, I_y, Zys], [G, Zsy, I_z]], format="csc"
+    )
 
     SPARSE_LT = build_sparse_LT(M=K, P=P)
 
     L_nnz = SPARSE_LT.nnz
 
-    P_MAT = np.zeros_like(K)
-    P_MAT[np.arange(dim), P] = 1.0
-
-    N = P_MAT @ K @ P_MAT.T
-    SPARSE_LOWER_N = sp.sparse.csc_matrix(np.tril(N))
+    N = K.tocsr()[P, :][:, P].tocsc()
+    SPARSE_LOWER_N = sp.sparse.tril(N, format="csc")
 
     # NOTE:
     # 1. P_MAT[i, j] = 0 iff j = P[i]
-    # 2. N[i, j] = (P_MAT K P_MAT.T)[i, j] = sum_k (P_MAT K)[i, k] (P_MAT.T)[k, j]
-    #            = sum_k (P_MAT K)[i, k] P_MAT[j, k] = (P_MAT K)[i, P[j]]
-    #            = sum_k P_MAT[i, k] K[k, P[j]] = K[P[i], P[j]]
+    # 2. N[i, j] = (P_MAT K P_MAT.T)[i, j] = K[P[i], P[j]]
 
     PINV = np.zeros_like(P)
     PINV[P] = np.arange(dim)
 
-    SPARSE_UPPER_H = sp.sparse.csc_matrix(np.triu(H))
+    SPARSE_UPPER_H = sp.sparse.triu(H, format="csc")
 
     # H_COORDINATE_MAP maps indices (i, j) of H (where i <= j) to the corresponding
     # data coordinate of SPARSE_UPPER_H.
@@ -80,7 +85,7 @@ def kkt_codegen(H, C, G, P, namespace, header_name):
             assert i <= j
             H_COORDINATE_MAP[(i, j)] = k
 
-    SPARSE_C = sp.sparse.csc_matrix(C)
+    SPARSE_C = C.tocsc()
 
     # C_COORDINATE_MAP maps indices (i, j) of C to the corresponding
     # data coordinate of SPARSE_C.
@@ -93,7 +98,7 @@ def kkt_codegen(H, C, G, P, namespace, header_name):
             i = int(SPARSE_C.indices[k])
             C_COORDINATE_MAP[(i, j)] = k
 
-    SPARSE_G = sp.sparse.csc_matrix(G)
+    SPARSE_G = G.tocsc()
 
     # G_COORDINATE_MAP maps indices (i, j) of G to the corresponding
     # data coordinate of SPARSE_G.
@@ -106,7 +111,7 @@ def kkt_codegen(H, C, G, P, namespace, header_name):
             i = int(SPARSE_G.indices[k])
             G_COORDINATE_MAP[(i, j)] = k
 
-    SPARSE_LOWER_K = sp.sparse.csc_matrix(np.tril(K))
+    SPARSE_LOWER_K = sp.sparse.tril(K, format="csc")
 
     # K_COORDINATE_MAP maps indices (i, j) of K (where i >= j)
     # to code accessing the appropriate input value.

@@ -1,9 +1,11 @@
-import numpy as np
 import scipy as sp
 
 
 def mat_vec_mult_codegen(M, namespace, header_name):
+    assert sp.sparse.issparse(M)
     assert len(M.shape) == 2
+    M = M.tocsc(copy=True)
+    M.eliminate_zeros()
 
     cpp_header_code = f"""
 #pragma once
@@ -19,10 +21,10 @@ namespace {namespace} {{
 namespace {namespace} {{
 """
 
-    M_is_symmetric = M.shape[0] == M.shape[1] and (M == M.T).all()
+    M_is_symmetric = M.shape[0] == M.shape[1] and (M != M.T).nnz == 0
 
     if M_is_symmetric:
-        SPARSE_UPPER_M = sp.sparse.csc_matrix(np.triu((M != 0.0)))
+        SPARSE_UPPER_M = sp.sparse.triu(M != 0.0, format="csc")
 
         add_upper_symmetric_Ax_to_y_impl = ""
 
@@ -54,7 +56,7 @@ void add_upper_symmetric_Ax_to_y(const double* A_data, const double* x, double* 
 """
 
     else:
-        SPARSE_M = sp.sparse.csc_matrix((M != 0.0))
+        SPARSE_M = (M != 0.0).tocsc()
 
         add_Ax_to_y_impl = ""
         add_ATx_to_y_impl = ""
