@@ -6,6 +6,10 @@
 
 namespace slacg::test {
 
+static_assert(expected_positive_inertia == x_dim);
+static_assert(expected_negative_inertia == y_dim + z_dim);
+static_assert(expected_zero_inertia == 0);
+
 TEST(SLACG, Test) {
   auto H_data = std::array<double, x_dim>{};
   auto C_data = std::array<double, x_dim * y_dim>{};

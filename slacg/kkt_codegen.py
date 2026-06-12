@@ -261,8 +261,8 @@ def kkt_codegen(H, C, G, P, namespace, header_name):
         ldlt_impl += f"    D_inv[{i}] = 1.0 / D_i;\n"
 
     ldlt_impl += (
-        f"    return positive_count == {x_dim} && "
-        f"negative_count == {y_dim + z_dim};\n"
+        "    return positive_count == expected_positive_inertia && "
+        "negative_count == expected_negative_inertia;\n"
     )
 
     solve_lower_unitriangular_impl = ""
@@ -389,6 +389,9 @@ constexpr int dim = {dim};
 constexpr int x_dim = {x_dim};
 constexpr int y_dim = {y_dim};
 constexpr int z_dim = {z_dim};
+constexpr int expected_positive_inertia = x_dim;
+constexpr int expected_negative_inertia = y_dim + z_dim;
+constexpr int expected_zero_inertia = 0;
 
 // Performs an L D L^T decomposition of the matrix (P_MAT * K * P_MAT.T), where
 // K = [[ H + r1 I   C.T     G.T    ]
@@ -399,7 +402,7 @@ constexpr int z_dim = {z_dim};
 // 2. C_data and G_data are expected to represent C and G, respectively, in CSC order.
 // 3. W is a diagonal matrix, represented by the vector of its diagonal elements, w.
 // Returns true iff the computed factorization has the expected KKT inertia:
-// x_dim positive pivots and y_dim + z_dim negative pivots.
+// expected_positive_inertia positive pivots and expected_negative_inertia negative pivots.
 // NOTE: LT_data and D_inv should have sizes L_nnz={L_nnz} and dim={dim} respectively.
 bool ldlt_factor(const double *SLACG_RESTRICT H_data,
                  const double *SLACG_RESTRICT C_data,
