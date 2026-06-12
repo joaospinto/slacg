@@ -131,6 +131,24 @@ void run_matvec(const int iterations, const int samples) {
                    [&] { return checksum(y); }));
 }
 
+void run_matvec_transpose(const int iterations, const int samples) {
+  std::array<double, 240> A_data{};
+  std::array<double, 72> x{};
+  std::array<double, 48> y{};
+  fill_data(A_data);
+  fill_data(x);
+
+  print_result("matvec_add_ATx", iterations,
+               benchmark_samples(
+                   iterations, samples,
+                   [&] {
+                     y.fill(0.0);
+                     slacg::bench::matvec::add_ATx_to_y(A_data.data(), x.data(),
+                                                        y.data());
+                   },
+                   [&] { return checksum(y); }));
+}
+
 void run_gtwg(const int iterations, const int samples) {
   std::array<double, 192> G_data{};
   std::array<double, 64> w{};
@@ -255,6 +273,7 @@ int main(int argc, char **argv) {
   run_ldlt_factor(iterations, samples);
   run_ldlt_solve(iterations, samples);
   run_matvec(iterations, samples);
+  run_matvec_transpose(iterations, samples);
   run_gtwg(iterations, samples);
   run_kkt_factor(iterations, samples);
   run_kkt_solve(iterations, samples);
