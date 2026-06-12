@@ -305,29 +305,57 @@ def kkt_codegen(H, C, G, P, namespace, header_name):
 
     add_CTx_to_y_impl = ""
     add_Cx_to_y_impl = ""
+    add_CTx_and_Cx_to_y_impl = ""
 
     if SPARSE_C.nnz == 0:
         add_CTx_to_y_impl += "    (void) C_data;\n    (void) x;\n    (void) y;\n"
         add_Cx_to_y_impl += "    (void) C_data;\n    (void) x;\n    (void) y;\n"
 
     for j in range(C.shape[1]):
+        col_start = SPARSE_C.indptr[j]
+        col_end = SPARSE_C.indptr[j + 1]
+        if col_start != col_end:
+            add_CTx_and_Cx_to_y_impl += (
+                f"    double y_x_C_{j} = y_x[{j}];\n"
+                f"    const double x_x_C_{j} = x_x[{j}];\n"
+            )
         for k in range(SPARSE_C.indptr[j], SPARSE_C.indptr[j + 1]):
             i = SPARSE_C.indices[k]
             add_CTx_to_y_impl += f"    y[{j}] += C_data[{k}] * x[{i}];\n"
             add_Cx_to_y_impl += f"    y[{i}] += C_data[{k}] * x[{j}];\n"
+            add_CTx_and_Cx_to_y_impl += (
+                f"    y_x_C_{j} += C_data[{k}] * x_y[{i}];\n"
+                f"    y_y[{i}] += C_data[{k}] * x_x_C_{j};\n"
+            )
+        if col_start != col_end:
+            add_CTx_and_Cx_to_y_impl += f"    y_x[{j}] = y_x_C_{j};\n"
 
     add_GTx_to_y_impl = ""
     add_Gx_to_y_impl = ""
+    add_GTx_and_Gx_to_y_impl = ""
 
     if SPARSE_G.nnz == 0:
         add_GTx_to_y_impl += "    (void) G_data;\n    (void) x;\n    (void) y;\n"
         add_Gx_to_y_impl += "    (void) G_data;\n    (void) x;\n    (void) y;\n"
 
     for j in range(G.shape[1]):
+        col_start = SPARSE_G.indptr[j]
+        col_end = SPARSE_G.indptr[j + 1]
+        if col_start != col_end:
+            add_GTx_and_Gx_to_y_impl += (
+                f"    double y_x_G_{j} = y_x[{j}];\n"
+                f"    const double x_x_G_{j} = x_x[{j}];\n"
+            )
         for k in range(SPARSE_G.indptr[j], SPARSE_G.indptr[j + 1]):
             i = SPARSE_G.indices[k]
             add_GTx_to_y_impl += f"    y[{j}] += G_data[{k}] * x[{i}];\n"
             add_Gx_to_y_impl += f"    y[{i}] += G_data[{k}] * x[{j}];\n"
+            add_GTx_and_Gx_to_y_impl += (
+                f"    y_x_G_{j} += G_data[{k}] * x_z[{i}];\n"
+                f"    y_z[{i}] += G_data[{k}] * x_x_G_{j};\n"
+            )
+        if col_start != col_end:
+            add_GTx_and_Gx_to_y_impl += f"    y_x[{j}] = y_x_G_{j};\n"
 
     cpp_header_code = f"""#pragma once
 
@@ -422,11 +450,9 @@ void add_Kx_to_y(const double *H_data, const double *C_data,
                  double *y_x, double *y_y, double *y_z) {{
     add_upper_symmetric_Hx_to_y(H_data, x_x, y_x);
 
-    add_CTx_to_y(C_data, x_y, y_x);
-    add_Cx_to_y(C_data, x_x, y_y);
+{add_CTx_and_Cx_to_y_impl}
 
-    add_GTx_to_y(G_data, x_z, y_x);
-    add_Gx_to_y(G_data, x_x, y_z);
+{add_GTx_and_Gx_to_y_impl}
 
     for (int i = 0; i < {x_dim}; ++i) {{
         y_x[i] += r1 * x_x[i];
