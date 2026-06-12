@@ -5,23 +5,15 @@ from slacg.internal.common import build_sparse_LT
 
 
 # This file provides utilities for generating efficient code for solving
-# Newton-KKT linear systems of the form Ax = b, where
-# A = [[ H + r1 I_x       0         C.T        G.T         0   ]
-#      [     0          Z / S        0         I_z         0   ]
-#      [     C            0      -diag(r2)      0          0   ]
-#      [     G           I_z         0       -diag(r3)  (1/p) I ]
-#      [     0            0          0       (1/p) I   (1/p) I ]];
-# through block-elimination (of the e- and s-blocks, i.e. 2nd and 5th),
-# this is reduced to solving linear systems of the form Kx = k, where
+# Newton-KKT linear systems of the form Kx = k, where
 # K = [[ H + r1 I_x     C.T         G.T     ]
 #      [     C        -diag(r2)      0      ]
 #      [     G           0      -W - diag(r3)]];
 # the following properties are expected to hold:
 # 1. (H + r1 I_x) is symmetric and positive definite;
-# 2. S, Z, W are diagonal and positive definite;
-# 6. r1 is a non-negative regularization parameter;
-# 7. r2 and r3 are vectors of non-negative regularization parameters;
-# 8. p is a positive (or +inf) penalty term on the elastic variables.
+# 2. W is diagonal and positive definite;
+# 3. r1 is a non-negative regularization parameter;
+# 4. r2 and r3 are vectors of non-negative regularization parameters.
 # For performance (i.e. reducing fill-in), the user should also pass
 # a permutation P so that an L D L^T decomposition of P_MAT @ K @ P_MAT.T
 # is performed (instead of directly on K). Note:
@@ -44,7 +36,6 @@ def kkt_codegen(H, C, G, P, namespace, header_name):
     y_dim = C.shape[0]
     z_dim = G.shape[0]
     dim = x_dim + y_dim + z_dim
-    full_dim = dim + 2 * z_dim
     I_x = np.eye(x_dim)
     I_y = np.eye(y_dim)
     I_z = np.eye(z_dim)
