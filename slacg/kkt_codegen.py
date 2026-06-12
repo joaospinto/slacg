@@ -248,6 +248,9 @@ def kkt_codegen(H, C, G, P, namespace, header_name):
             line = f"    LT_data[{L_ij_idx}] *= D_inv[{j}];\n"
             ldlt_impl += line
         ldlt_impl += (
+            "    if (!std::isfinite(D_i)) {\n"
+            "        return false;\n"
+            "    }\n"
             "    if (D_i > 0.0) {\n"
             "        ++positive_count;\n"
             "    } else if (D_i < 0.0) {\n"
