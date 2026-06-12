@@ -240,13 +240,12 @@ def kkt_codegen(H, C, G, P, namespace, header_name):
             L_ij_idx = L_COORDINATE_MAP[(i, j)]
             assert L_ij_idx in LT_filled
             assert j in D_filled
-            line = (
-                f"    D_i -= LT_data[{L_ij_idx}] * "
-                f"(LT_data[{L_ij_idx}] * D_inv[{j}]);\n"
+            ldlt_impl += (
+                f"    const double LT_{i}_{j} = LT_data[{L_ij_idx}];\n"
+                f"    const double normalized_LT_{i}_{j} = LT_{i}_{j} * D_inv[{j}];\n"
+                f"    D_i -= LT_{i}_{j} * normalized_LT_{i}_{j};\n"
+                f"    LT_data[{L_ij_idx}] = normalized_LT_{i}_{j};\n"
             )
-            ldlt_impl += line
-            line = f"    LT_data[{L_ij_idx}] *= D_inv[{j}];\n"
-            ldlt_impl += line
         ldlt_impl += (
             "    if (!std::isfinite(D_i)) {\n"
             "        return false;\n"
