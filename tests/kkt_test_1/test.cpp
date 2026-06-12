@@ -36,6 +36,10 @@ TEST(SLACG, Test) {
   EXPECT_TRUE(ldlt_factor(H_data.data(), C_data.data(), G_data.data(), s.data(),
                           r1, r2.data(), r3.data(), L_data.data(),
                           D_inv.data()));
+  EXPECT_EQ(ldlt_factor_with_status(H_data.data(), C_data.data(), G_data.data(),
+                                    s.data(), r1, r2.data(), r3.data(),
+                                    L_data.data(), D_inv.data()),
+            FactorStatus::kSuccess);
 
   ldlt_solve(L_data.data(), D_inv.data(), b.data(), x.data());
 
@@ -82,6 +86,10 @@ TEST(SLACG, DetectsWrongInertia) {
   EXPECT_FALSE(ldlt_factor(H_data.data(), C_data.data(), G_data.data(),
                            s.data(), r1, r2.data(), r3.data(), L_data.data(),
                            D_inv.data()));
+  EXPECT_EQ(ldlt_factor_with_status(H_data.data(), C_data.data(), G_data.data(),
+                                    s.data(), r1, r2.data(), r3.data(),
+                                    L_data.data(), D_inv.data()),
+            FactorStatus::kWrongInertia);
 }
 
 TEST(SLACG, DetectsNonFinitePivot) {
@@ -105,6 +113,37 @@ TEST(SLACG, DetectsNonFinitePivot) {
   EXPECT_FALSE(ldlt_factor(H_data.data(), C_data.data(), G_data.data(),
                            s.data(), r1, r2.data(), r3.data(), L_data.data(),
                            D_inv.data()));
+  EXPECT_EQ(ldlt_factor_with_status(H_data.data(), C_data.data(), G_data.data(),
+                                    s.data(), r1, r2.data(), r3.data(),
+                                    L_data.data(), D_inv.data()),
+            FactorStatus::kNonFinitePivot);
+}
+
+TEST(SLACG, DetectsZeroPivot) {
+  auto H_data = std::array<double, x_dim>{};
+  auto C_data = std::array<double, x_dim * y_dim>{};
+  auto G_data = std::array<double, x_dim * z_dim>{};
+  auto s = std::array<double, z_dim>{};
+  H_data.fill(1.0);
+  C_data.fill(0.0);
+  G_data.fill(0.0);
+  s.fill(0.0);
+  constexpr double r1 = 0.0;
+  auto r2 = std::array<double, y_dim>{};
+  auto r3 = std::array<double, z_dim>{};
+  r2.fill(0.0);
+  r3.fill(0.0);
+
+  std::array<double, L_nnz> L_data;
+  std::array<double, dim> D_inv;
+
+  EXPECT_FALSE(ldlt_factor(H_data.data(), C_data.data(), G_data.data(),
+                           s.data(), r1, r2.data(), r3.data(), L_data.data(),
+                           D_inv.data()));
+  EXPECT_EQ(ldlt_factor_with_status(H_data.data(), C_data.data(), G_data.data(),
+                                    s.data(), r1, r2.data(), r3.data(),
+                                    L_data.data(), D_inv.data()),
+            FactorStatus::kZeroPivot);
 }
 
 } // namespace slacg::test

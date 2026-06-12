@@ -248,21 +248,24 @@ def kkt_codegen(H, C, G, P, namespace, header_name):
             )
         ldlt_impl += (
             "    if (!std::isfinite(D_i)) {\n"
-            "        return false;\n"
+            "        return FactorStatus::kNonFinitePivot;\n"
             "    }\n"
             "    if (D_i > 0.0) {\n"
             "        ++positive_count;\n"
             "    } else if (D_i < 0.0) {\n"
             "        ++negative_count;\n"
             "    } else {\n"
-            "        return false;\n"
+            "        return FactorStatus::kZeroPivot;\n"
             "    }\n"
         )
         ldlt_impl += f"    D_inv[{i}] = 1.0 / D_i;\n"
 
     ldlt_impl += (
-        "    return positive_count == expected_positive_inertia && "
-        "negative_count == expected_negative_inertia;\n"
+        "    if (positive_count != expected_positive_inertia || "
+        "negative_count != expected_negative_inertia) {\n"
+        "        return FactorStatus::kWrongInertia;\n"
+        "    }\n"
+        "    return FactorStatus::kSuccess;\n"
     )
 
     solve_lower_unitriangular_impl = ""
@@ -393,6 +396,13 @@ constexpr int expected_positive_inertia = x_dim;
 constexpr int expected_negative_inertia = y_dim + z_dim;
 constexpr int expected_zero_inertia = 0;
 
+enum class FactorStatus {{
+  kSuccess,
+  kWrongInertia,
+  kZeroPivot,
+  kNonFinitePivot,
+}};
+
 // Performs an L D L^T decomposition of the matrix (P_MAT * K * P_MAT.T), where
 // K = [[ H + r1 I   C.T     G.T    ]
 //      [    C     -diag(r2)    0       ]
@@ -401,9 +411,20 @@ constexpr int expected_zero_inertia = 0;
 // 1. H_data is expected to represent np.triu(H) in CSC order.
 // 2. C_data and G_data are expected to represent C and G, respectively, in CSC order.
 // 3. W is a diagonal matrix, represented by the vector of its diagonal elements, w.
-// Returns true iff the computed factorization has the expected KKT inertia:
+// Returns kSuccess iff the computed factorization has the expected KKT inertia:
 // expected_positive_inertia positive pivots and expected_negative_inertia negative pivots.
 // NOTE: LT_data and D_inv should have sizes L_nnz={L_nnz} and dim={dim} respectively.
+FactorStatus ldlt_factor_with_status(const double *SLACG_RESTRICT H_data,
+                                      const double *SLACG_RESTRICT C_data,
+                                      const double *SLACG_RESTRICT G_data,
+                                      const double *SLACG_RESTRICT w,
+                                      const double r1,
+                                      const double *SLACG_RESTRICT r2,
+                                      const double *SLACG_RESTRICT r3,
+                                      double *SLACG_RESTRICT LT_data,
+                                      double *SLACG_RESTRICT D_inv);
+
+// Returns true iff ldlt_factor_with_status returns FactorStatus::kSuccess.
 bool ldlt_factor(const double *SLACG_RESTRICT H_data,
                  const double *SLACG_RESTRICT C_data,
                  const double *SLACG_RESTRICT G_data,
@@ -484,6 +505,17 @@ void solve_upper_unitriangular(const double *SLACG_RESTRICT LT_data,
 {solve_upper_unitriangular_impl}}}
 }}  // namespace
 
+FactorStatus ldlt_factor_with_status(const double *SLACG_RESTRICT H_data,
+                                      const double *SLACG_RESTRICT C_data,
+                                      const double *SLACG_RESTRICT G_data,
+                                      const double *SLACG_RESTRICT w,
+                                      const double r1,
+                                      const double *SLACG_RESTRICT r2,
+                                      const double *SLACG_RESTRICT r3,
+                                      double *SLACG_RESTRICT LT_data,
+                                      double *SLACG_RESTRICT D_inv) {{
+{ldlt_impl}}}
+
 bool ldlt_factor(const double *SLACG_RESTRICT H_data,
                  const double *SLACG_RESTRICT C_data,
                  const double *SLACG_RESTRICT G_data,
@@ -492,7 +524,9 @@ bool ldlt_factor(const double *SLACG_RESTRICT H_data,
                  const double *SLACG_RESTRICT r3,
                  double *SLACG_RESTRICT LT_data,
                  double *SLACG_RESTRICT D_inv) {{
-{ldlt_impl}}}
+    return ldlt_factor_with_status(H_data, C_data, G_data, w, r1, r2, r3,
+                                   LT_data, D_inv) == FactorStatus::kSuccess;
+}}
 
 void ldlt_solve(const double *SLACG_RESTRICT LT_data,
                 const double *SLACG_RESTRICT D_inv,
