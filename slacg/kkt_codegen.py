@@ -8,19 +8,20 @@ from slacg.internal.common import build_sparse_LT
 # Newton-KKT linear systems of the form Ax = b, where
 # A = [[ H + r1 I_x       0         C.T        G.T         0   ]
 #      [     0          Z / S        0         I_z         0   ]
-#      [     C            0      -r2 * I_y      0          0   ]
-#      [     G           I_z         0       -r3 I_z   (1/p) I ]
+#      [     C            0      -diag(r2)      0          0   ]
+#      [     G           I_z         0       -diag(r3)  (1/p) I ]
 #      [     0            0          0       (1/p) I   (1/p) I ]];
 # through block-elimination (of the e- and s-blocks, i.e. 2nd and 5th),
 # this is reduced to solving linear systems of the form Kx = k, where
 # K = [[ H + r1 I_x     C.T         G.T     ]
-#      [     C        -r2 I_y        0      ]
-#      [     G           0      -W - r3 I_z ]];
+#      [     C        -diag(r2)      0      ]
+#      [     G           0      -W - diag(r3)]];
 # the following properties are expected to hold:
 # 1. (H + r1 I_x) is symmetric and positive definite;
 # 2. S, Z, W are diagonal and positive definite;
-# 6. r1, r2, r3 are non-negative regularization parameters;
-# 7. p is a positive (or +inf) penalty term on the elastic variables.
+# 6. r1 is a non-negative regularization parameter;
+# 7. r2 and r3 are vectors of non-negative regularization parameters;
+# 8. p is a positive (or +inf) penalty term on the elastic variables.
 # For performance (i.e. reducing fill-in), the user should also pass
 # a permutation P so that an L D L^T decomposition of P_MAT @ K @ P_MAT.T
 # is performed (instead of directly on K). Note:
@@ -142,7 +143,8 @@ def kkt_codegen(H, C, G, P, namespace, header_name):
                 else:
                     assert j < x_dim + y_dim
                     assert i == j
-                    code = "(-r2)"
+                    y_i = i - x_dim
+                    code = f"(-r2[{y_i}])"
             else:
                 assert i < x_dim + y_dim + z_dim
                 if j < x_dim:
@@ -155,7 +157,7 @@ def kkt_codegen(H, C, G, P, namespace, header_name):
                         breakpoint()
                     assert i == j
                     s_i = i - x_dim - y_dim
-                    code = f"(-w[{s_i}] - r3)"
+                    code = f"(-w[{s_i}] - r3[{s_i}])"
             K_COORDINATE_MAP[(i, j)] = code
 
     # N_COORDINATE_MAP maps indices (i, j) of N (where i >= j)
@@ -336,15 +338,15 @@ constexpr int z_dim = {z_dim};
 
 // Performs an L D L^T decomposition of the matrix (P_MAT * K * P_MAT.T), where
 // K = [[ H + r1 I   C.T     G.T    ]
-//      [    C      -r2 I     0     ]
-//      [    G        0   -W - r3 I ]],
+//      [    C     -diag(r2)    0       ]
+//      [    G         0    -W - diag(r3)]],
 // where:
 // 1. H_data is expected to represent np.triu(H) in CSC order.
 // 2. C_data and G_data are expected to represent C and G, respectively, in CSC order.
 // 3. W is a diagonal matrix, represented by the vector of its diagonal elements, w.
 // NOTE: LT_data and D_diag should have sizes L_nnz={L_nnz} and dim={dim} respectively.
 void ldlt_factor(const double *H_data, const double *C_data, const double *G_data,
-                 const double *w, const double r1, const double r2, const double r3,
+                 const double *w, const double r1, const double *r2, const double *r3,
                  double *LT_data, double *D_diag);
 
 // Solves K * x = b, given a pre-computed L D L^T factorization of (P_MAT * K * P_MAT.T).
@@ -368,11 +370,11 @@ void add_Gx_to_y(const double *G_data, const double *x, double *y);
 
 // Adds K * x to y, where
 // K = [[ H + r1 I   C.T     G.T    ]
-//      [    C      -r2 I     0     ]
-//      [    G        0   -W - r3 I ]].
+//      [    C     -diag(r2)    0       ]
+//      [    G         0    -W - diag(r3)]].
 void add_Kx_to_y(const double *H_data, const double *C_data,
                  const double *G_data, const double *w,
-                 const double r1, const double r2, const double r3,
+                 const double r1, const double *r2, const double *r3,
                  const double *x_x, const double *x_y, const double *x_z,
                  double *y_x, double *y_y, double *y_z);
 
@@ -396,7 +398,7 @@ void solve_upper_unitriangular(const double *LT_data, const double *b, double *x
 
 void ldlt_factor(const double *H_data, const double *C_data,
                  const double *G_data, const double *w, const double r1,
-                 const double r2, const double r3, double *LT_data, double *D_diag) {{
+                 const double *r2, const double *r3, double *LT_data, double *D_diag) {{
 {ldlt_impl}}}
 
 void ldlt_solve(const double *LT_data, const double *D_diag, const double *b, double *x) {{
@@ -413,7 +415,7 @@ void ldlt_solve(const double *LT_data, const double *D_diag, const double *b, do
 
 void add_Kx_to_y(const double *H_data, const double *C_data,
                  const double *G_data, const double *w,
-                 const double r1, const double r2, const double r3,
+                 const double r1, const double *r2, const double *r3,
                  const double *x_x, const double *x_y, const double *x_z,
                  double *y_x, double *y_y, double *y_z) {{
     add_upper_symmetric_Hx_to_y(H_data, x_x, y_x);
@@ -429,11 +431,11 @@ void add_Kx_to_y(const double *H_data, const double *C_data,
     }}
 
     for (int i = 0; i < {y_dim}; ++i) {{
-      y_y[i] -= r2 * x_y[i];
+      y_y[i] -= r2[i] * x_y[i];
     }}
 
     for (int i = 0; i < {z_dim}; ++i) {{
-      y_z[i] -= (w[i] + r3) * x_z[i];
+      y_z[i] -= (w[i] + r3[i]) * x_z[i];
     }}
 }}
 
