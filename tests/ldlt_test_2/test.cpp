@@ -60,11 +60,11 @@ TEST(SLACG, Test) {
     1., 1., 1., 1., 1., 1., 1., 1., 1.};
 
   std::array<double, 545> LT_data;
-  std::array<double, 60> D_diag;
+  std::array<double, 60> D_inv;
   std::array<double, 60> x;
 
-  ldlt_factor(A_data.data(), LT_data.data(), D_diag.data());
-  ldlt_solve(LT_data.data(), D_diag.data(), b.data(), x.data());
+  ldlt_factor(A_data.data(), LT_data.data(), D_inv.data());
+  ldlt_solve(LT_data.data(), D_inv.data(), b.data(), x.data());
 
   std::array<double, 60> y;
 

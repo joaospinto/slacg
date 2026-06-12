@@ -72,7 +72,7 @@ def ldlt_codegen(M, P, namespace, header_name):
     # NOTE: while the following can be in any order, we sort for consistency.
     L_nz_per_col = [sorted(x) for x in L_nz_set_per_col]
 
-    ldlt_impl = ""
+    ldlt_impl = "    double D_i;\n"
 
     L_filled = set()
     D_filled = set()
@@ -97,8 +97,8 @@ def ldlt_codegen(M, P, namespace, header_name):
             ldlt_impl += line
             L_filled.add((L_ij_idx))
 
-        # Update D_diag and finalize column of LT.
-        line = f"    D_diag[{i}] = "
+        # Update diagonal and finalize column of LT.
+        line = "    D_i = "
         if (i, i) in N_COORDINATE_MAP:
             line += f"A_data[{N_COORDINATE_MAP[(i, i)]}];\n"
         else:
@@ -110,10 +110,14 @@ def ldlt_codegen(M, P, namespace, header_name):
             L_ij_idx = L_COORDINATE_MAP[(i, j)]
             assert L_ij_idx in L_filled
             assert j in D_filled
-            line = f"    D_diag[{i}] -= LT_data[{L_ij_idx}] * (LT_data[{L_ij_idx}] / D_diag[{j}]);\n"
+            line = (
+                f"    D_i -= LT_data[{L_ij_idx}] * "
+                f"(LT_data[{L_ij_idx}] * D_inv[{j}]);\n"
+            )
             ldlt_impl += line
-            line = f"    LT_data[{L_ij_idx}] /= D_diag[{j}];\n"
+            line = f"    LT_data[{L_ij_idx}] *= D_inv[{j}];\n"
             ldlt_impl += line
+        ldlt_impl += f"    D_inv[{i}] = 1.0 / D_i;\n"
 
     solve_lower_unitriangular_impl = ""
 
@@ -145,7 +149,7 @@ def ldlt_codegen(M, P, namespace, header_name):
     # 1. Mx = b iff (P_MAT M P_MAT.T) (P_MAT x) = (P_MAT b) iff (L D L.T) (P_MAT x) = (P_MAT b).
     # 2. First, set tmp2 = P_MAT b. Note tmp2[i] = (P_MAT b)[i] = sum_k P_MAT[i, k] b[k] = b[P[i]].
     # 3. Next, solve (L + I) tmp1 = tmp2.
-    # 4. Next, do tmp1 /= D_diag.
+    # 4. Next, do tmp1 *= D_inv.
     # 5. Next, solve (L.T + I) tmp2 = tmp1.
     # 6. Finally, solve P_MAT x = tmp2, i.e. set x = P_MAT.T tmp2. Note x[i] = (P_MAT.T tmp2)[i]
     #    = sum_k (P_MAT.T)[i, k] tmp2[k] = sum_k P_MAT[k, i] tmp2[k] = tmp2[PINV[i]].
@@ -157,6 +161,10 @@ def ldlt_codegen(M, P, namespace, header_name):
     for i in range(dim):
         permute_solution += f"    x[{P[i]}] = tmp2[{i}];\n"
 
+    scale_diagonal = ""
+    for i in range(dim):
+        scale_diagonal += f"    tmp1[{i}] *= D_inv[{i}];\n"
+
     cpp_header_code = f"""#pragma once
 
 namespace {namespace} {{
@@ -167,12 +175,12 @@ constexpr int dim = {dim};
 
 // Performs an L D L^T decomposition of the A matrix,
 // where A_data is expected to represent np.triu(A) in CSC order.
-// NOTE: LT_data and D_diag should have sizes L_nnz={L_nnz} and dim={dim} respectively.
-void ldlt_factor(const double* A_data, double* LT_data, double* D_diag);
+// NOTE: LT_data and D_inv should have sizes L_nnz={L_nnz} and dim={dim} respectively.
+void ldlt_factor(const double* A_data, double* LT_data, double* D_inv);
 
 // Solves A * x = b, given a pre-computed L D L^T factorization of A.
-// LT_data and D_diag can be computed via the ldlt_factor method defined above.
-void ldlt_solve(const double* LT_data, const double* D_diag, const double* b, double* x);
+// LT_data and D_inv can be computed via the ldlt_factor method defined above.
+void ldlt_solve(const double* LT_data, const double* D_inv, const double* b, double* x);
 
 }}  // namespace {namespace}\n"""
 
@@ -182,7 +190,7 @@ void ldlt_solve(const double* LT_data, const double* D_diag, const double* b, do
 
 namespace {namespace} {{
 
-void ldlt_factor(const double* A_data, double* LT_data, double* D_diag) {{
+void ldlt_factor(const double* A_data, double* LT_data, double* D_inv) {{
 {ldlt_impl}}}
 
 namespace {{
@@ -193,14 +201,12 @@ void solve_upper_unitriangular(const double* LT_data, const double* b, double* x
 {solve_upper_unitriangular_impl}}}
 }} // namespace
 
-void ldlt_solve(const double* LT_data, const double* D_diag, const double* b, double* x) {{
+void ldlt_solve(const double* LT_data, const double* D_inv, const double* b, double* x) {{
     std::array<double, {dim}> tmp1;
     std::array<double, {dim}> tmp2;
 {permute_b}
     solve_lower_unitriangular(LT_data, tmp2.data(), tmp1.data());
-    for (std::size_t i = 0; i < {dim}; ++i) {{
-        tmp1[i] /= D_diag[i];
-    }}
+{scale_diagonal}
     solve_upper_unitriangular(LT_data, tmp1.data(), tmp2.data());
 {permute_solution}}}
 

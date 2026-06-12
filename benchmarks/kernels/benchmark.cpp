@@ -48,30 +48,30 @@ void print_result(const std::string &name, const int iterations,
 void run_ldlt_factor(const int iterations) {
   std::array<double, 170> A_data{};
   std::array<double, slacg::bench::ldlt::L_nnz> LT_data{};
-  std::array<double, slacg::bench::ldlt::dim> D_diag{};
+  std::array<double, slacg::bench::ldlt::dim> D_inv{};
   fill_data(A_data);
 
   print_result("ldlt_factor", iterations,
                benchmark_ns_per_call(iterations, [&] {
                  slacg::bench::ldlt::ldlt_factor(A_data.data(), LT_data.data(),
-                                                  D_diag.data());
+                                                  D_inv.data());
                }));
 }
 
 void run_ldlt_solve(const int iterations) {
   std::array<double, 170> A_data{};
   std::array<double, slacg::bench::ldlt::L_nnz> LT_data{};
-  std::array<double, slacg::bench::ldlt::dim> D_diag{};
+  std::array<double, slacg::bench::ldlt::dim> D_inv{};
   std::array<double, slacg::bench::ldlt::dim> b{};
   std::array<double, slacg::bench::ldlt::dim> x{};
   fill_data(A_data);
   fill_data(b);
   slacg::bench::ldlt::ldlt_factor(A_data.data(), LT_data.data(),
-                                  D_diag.data());
+                                  D_inv.data());
 
   print_result("ldlt_solve", iterations,
                benchmark_ns_per_call(iterations, [&] {
-                 slacg::bench::ldlt::ldlt_solve(LT_data.data(), D_diag.data(),
+                 slacg::bench::ldlt::ldlt_solve(LT_data.data(), D_inv.data(),
                                                 b.data(), x.data());
                }));
 }
@@ -113,7 +113,7 @@ void run_kkt_factor(const int iterations) {
   std::array<double, slacg::bench::kkt::y_dim> r2{};
   std::array<double, slacg::bench::kkt::z_dim> r3{};
   std::array<double, slacg::bench::kkt::L_nnz> LT_data{};
-  std::array<double, slacg::bench::kkt::dim> D_diag{};
+  std::array<double, slacg::bench::kkt::dim> D_inv{};
   fill_data(H_data);
   fill_data(C_data);
   fill_data(G_data);
@@ -126,7 +126,7 @@ void run_kkt_factor(const int iterations) {
                  slacg::bench::kkt::ldlt_factor(
                      H_data.data(), C_data.data(), G_data.data(), w.data(),
                      1e-3, r2.data(), r3.data(), LT_data.data(),
-                     D_diag.data());
+                     D_inv.data());
                }));
 }
 
@@ -138,7 +138,7 @@ void run_kkt_solve(const int iterations) {
   std::array<double, slacg::bench::kkt::y_dim> r2{};
   std::array<double, slacg::bench::kkt::z_dim> r3{};
   std::array<double, slacg::bench::kkt::L_nnz> LT_data{};
-  std::array<double, slacg::bench::kkt::dim> D_diag{};
+  std::array<double, slacg::bench::kkt::dim> D_inv{};
   std::array<double, slacg::bench::kkt::dim> b{};
   std::array<double, slacg::bench::kkt::dim> x{};
   fill_data(H_data);
@@ -150,11 +150,11 @@ void run_kkt_solve(const int iterations) {
   r3.fill(1e-3);
   slacg::bench::kkt::ldlt_factor(H_data.data(), C_data.data(), G_data.data(),
                                  w.data(), 1e-3, r2.data(), r3.data(),
-                                 LT_data.data(), D_diag.data());
+                                 LT_data.data(), D_inv.data());
 
   print_result("kkt_ldlt_solve", iterations,
                benchmark_ns_per_call(iterations, [&] {
-                 slacg::bench::kkt::ldlt_solve(LT_data.data(), D_diag.data(),
+                 slacg::bench::kkt::ldlt_solve(LT_data.data(), D_inv.data(),
                                                b.data(), x.data());
                }));
 }

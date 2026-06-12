@@ -21,7 +21,7 @@ TEST(SLACG, Test) {
   r3.fill(1e-3);
 
   std::array<double, L_nnz> L_data;
-  std::array<double, dim> D_diag;
+  std::array<double, dim> D_inv;
 
   auto b = std::array<double, dim>{};
   b.fill(1.0);
@@ -29,9 +29,9 @@ TEST(SLACG, Test) {
   std::array<double, dim> x;
 
   ldlt_factor(H_data.data(), C_data.data(), G_data.data(), s.data(), r1,
-              r2.data(), r3.data(), L_data.data(), D_diag.data());
+              r2.data(), r3.data(), L_data.data(), D_inv.data());
 
-  ldlt_solve(L_data.data(), D_diag.data(), b.data(), x.data());
+  ldlt_solve(L_data.data(), D_inv.data(), b.data(), x.data());
 
   std::array<double, dim> y;
 

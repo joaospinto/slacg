@@ -11,11 +11,11 @@ TEST(SLACG, Test) {
   constexpr auto b = std::array{180., 223., 266.};
 
   std::array<double, 3> LT_data;
-  std::array<double, 3> D_diag;
+  std::array<double, 3> D_inv;
   std::array<double, 3> x;
 
-  ldlt_factor(A_data.data(), LT_data.data(), D_diag.data());
-  ldlt_solve(LT_data.data(), D_diag.data(), b.data(), x.data());
+  ldlt_factor(A_data.data(), LT_data.data(), D_inv.data());
+  ldlt_solve(LT_data.data(), D_inv.data(), b.data(), x.data());
 
   EXPECT_NEAR(x[0], 0.0, 1e-12);
   EXPECT_NEAR(x[1], 1.0, 1e-12);
