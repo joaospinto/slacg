@@ -1,6 +1,17 @@
 import numpy as np
 import scipy as sp
 
+RESTRICT_MACRO = """#if defined(__GNUC__) || defined(__clang__)
+#define SLACG_RESTRICT __restrict__
+#else
+#define SLACG_RESTRICT
+#endif
+
+// Pointer arguments marked SLACG_RESTRICT must not point to overlapping memory.
+
+"""
+
+
 def build_sparse_LT(M, P):
     assert sp.sparse.issparse(M)
 

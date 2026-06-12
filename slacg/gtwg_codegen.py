@@ -1,5 +1,7 @@
 import scipy as sp
 
+from slacg.internal.common import RESTRICT_MACRO
+
 
 def gtwg_codegen(G, namespace, header_name):
     assert sp.sparse.issparse(G)
@@ -31,6 +33,8 @@ def gtwg_codegen(G, namespace, header_name):
 
     cpp_header_code = f"""
 #pragma once
+
+{RESTRICT_MACRO}
 
 namespace {namespace} {{
 """
@@ -77,11 +81,17 @@ namespace {namespace} {{
 // Computes G.T @ (W + r I) @ G in CSC format, where:
 // 1. G_data is expected to represent G in CSC order.
 // 2. W is a diagonal matrix, represented by the vector of its diagonal elements, w.
-void gt_w_g(const double* G_data, const double* w, const double r, double* gt_w_g);
+void gt_w_g(const double* SLACG_RESTRICT G_data,
+            const double* SLACG_RESTRICT w,
+            const double r,
+            double* SLACG_RESTRICT gt_w_g);
 """
 
     cpp_impl_code += f"""
-void gt_w_g(const double* G_data, const double* w, const double r, double* gt_w_g) {{
+void gt_w_g(const double* SLACG_RESTRICT G_data,
+            const double* SLACG_RESTRICT w,
+            const double r,
+            double* SLACG_RESTRICT gt_w_g) {{
 {gt_w_g_impl}}}
 """
 

@@ -1,7 +1,7 @@
-import numpy as np
 import scipy as sp
+import numpy as np
 
-from slacg.internal.common import build_sparse_LT
+from slacg.internal.common import RESTRICT_MACRO, build_sparse_LT
 
 
 # This file provides utilities for generating efficient code for solving
@@ -377,6 +377,8 @@ def kkt_codegen(H, C, G, P, namespace, header_name):
 
     cpp_header_code = f"""#pragma once
 
+{RESTRICT_MACRO}
+
 namespace {namespace} {{
 
 constexpr int L_nnz = {L_nnz};
@@ -397,38 +399,63 @@ constexpr int z_dim = {z_dim};
 // Returns true iff the computed factorization has the expected KKT inertia:
 // x_dim positive pivots and y_dim + z_dim negative pivots.
 // NOTE: LT_data and D_inv should have sizes L_nnz={L_nnz} and dim={dim} respectively.
-bool ldlt_factor(const double *H_data, const double *C_data, const double *G_data,
-                 const double *w, const double r1, const double *r2, const double *r3,
-                 double *LT_data, double *D_inv);
+bool ldlt_factor(const double *SLACG_RESTRICT H_data,
+                 const double *SLACG_RESTRICT C_data,
+                 const double *SLACG_RESTRICT G_data,
+                 const double *SLACG_RESTRICT w, const double r1,
+                 const double *SLACG_RESTRICT r2,
+                 const double *SLACG_RESTRICT r3,
+                 double *SLACG_RESTRICT LT_data,
+                 double *SLACG_RESTRICT D_inv);
 
 // Solves K * x = b, given a pre-computed L D L^T factorization of (P_MAT * K * P_MAT.T).
 // LT_data and D_inv can be computed via the ldlt_factor method defined above.
-void ldlt_solve(const double *LT_data, const double *D_inv, const double *b, double *x);
+void ldlt_solve(const double *SLACG_RESTRICT LT_data,
+                const double *SLACG_RESTRICT D_inv,
+                const double *SLACG_RESTRICT b,
+                double *SLACG_RESTRICT x);
 
 // Adds H @ x to y.
-void add_upper_symmetric_Hx_to_y(const double *H_data, const double *x, double *y);
+void add_upper_symmetric_Hx_to_y(const double *SLACG_RESTRICT H_data,
+                                 const double *SLACG_RESTRICT x,
+                                 double *SLACG_RESTRICT y);
 
 // Adds C.T @ x to y.
-void add_CTx_to_y(const double *C_data, const double *x, double *y);
+void add_CTx_to_y(const double *SLACG_RESTRICT C_data,
+                  const double *SLACG_RESTRICT x,
+                  double *SLACG_RESTRICT y);
 
 // Adds C @ x to y.
-void add_Cx_to_y(const double *C_data, const double *x, double *y);
+void add_Cx_to_y(const double *SLACG_RESTRICT C_data,
+                 const double *SLACG_RESTRICT x,
+                 double *SLACG_RESTRICT y);
 
 // Adds G.T @ x to y.
-void add_GTx_to_y(const double *G_data, const double *x, double *y);
+void add_GTx_to_y(const double *SLACG_RESTRICT G_data,
+                  const double *SLACG_RESTRICT x,
+                  double *SLACG_RESTRICT y);
 
 // Adds G @ x to y.
-void add_Gx_to_y(const double *G_data, const double *x, double *y);
+void add_Gx_to_y(const double *SLACG_RESTRICT G_data,
+                 const double *SLACG_RESTRICT x,
+                 double *SLACG_RESTRICT y);
 
 // Adds K * x to y, where
 // K = [[ H + r1 I   C.T     G.T    ]
 //      [    C     -diag(r2)    0       ]
 //      [    G         0    -W - diag(r3)]].
-void add_Kx_to_y(const double *H_data, const double *C_data,
-                 const double *G_data, const double *w,
-                 const double r1, const double *r2, const double *r3,
-                 const double *x_x, const double *x_y, const double *x_z,
-                 double *y_x, double *y_y, double *y_z);
+void add_Kx_to_y(const double *SLACG_RESTRICT H_data,
+                 const double *SLACG_RESTRICT C_data,
+                 const double *SLACG_RESTRICT G_data,
+                 const double *SLACG_RESTRICT w, const double r1,
+                 const double *SLACG_RESTRICT r2,
+                 const double *SLACG_RESTRICT r3,
+                 const double *SLACG_RESTRICT x_x,
+                 const double *SLACG_RESTRICT x_y,
+                 const double *SLACG_RESTRICT x_z,
+                 double *SLACG_RESTRICT y_x,
+                 double *SLACG_RESTRICT y_y,
+                 double *SLACG_RESTRICT y_z);
 
 }}  // namespace {namespace}\n"""
 
@@ -441,19 +468,31 @@ void add_Kx_to_y(const double *H_data, const double *C_data,
 namespace {namespace} {{
 
 namespace {{
-void solve_lower_unitriangular(const double *LT_data, const double *b, double *x) {{
+void solve_lower_unitriangular(const double *SLACG_RESTRICT LT_data,
+                               const double *SLACG_RESTRICT b,
+                               double *SLACG_RESTRICT x) {{
 {solve_lower_unitriangular_impl}}}
 
-void solve_upper_unitriangular(const double *LT_data, const double *b, double *x) {{
+void solve_upper_unitriangular(const double *SLACG_RESTRICT LT_data,
+                               const double *SLACG_RESTRICT b,
+                               double *SLACG_RESTRICT x) {{
 {solve_upper_unitriangular_impl}}}
 }}  // namespace
 
-bool ldlt_factor(const double *H_data, const double *C_data,
-                 const double *G_data, const double *w, const double r1,
-                 const double *r2, const double *r3, double *LT_data, double *D_inv) {{
+bool ldlt_factor(const double *SLACG_RESTRICT H_data,
+                 const double *SLACG_RESTRICT C_data,
+                 const double *SLACG_RESTRICT G_data,
+                 const double *SLACG_RESTRICT w, const double r1,
+                 const double *SLACG_RESTRICT r2,
+                 const double *SLACG_RESTRICT r3,
+                 double *SLACG_RESTRICT LT_data,
+                 double *SLACG_RESTRICT D_inv) {{
 {ldlt_impl}}}
 
-void ldlt_solve(const double *LT_data, const double *D_inv, const double *b, double *x) {{
+void ldlt_solve(const double *SLACG_RESTRICT LT_data,
+                const double *SLACG_RESTRICT D_inv,
+                const double *SLACG_RESTRICT b,
+                double *SLACG_RESTRICT x) {{
     std::array<double, {dim}> tmp1;
     std::array<double, {dim}> tmp2;
 {permute_b}
@@ -463,11 +502,18 @@ void ldlt_solve(const double *LT_data, const double *D_inv, const double *b, dou
 
 {permute_solution}}}
 
-void add_Kx_to_y(const double *H_data, const double *C_data,
-                 const double *G_data, const double *w,
-                 const double r1, const double *r2, const double *r3,
-                 const double *x_x, const double *x_y, const double *x_z,
-                 double *y_x, double *y_y, double *y_z) {{
+void add_Kx_to_y(const double *SLACG_RESTRICT H_data,
+                 const double *SLACG_RESTRICT C_data,
+                 const double *SLACG_RESTRICT G_data,
+                 const double *SLACG_RESTRICT w, const double r1,
+                 const double *SLACG_RESTRICT r2,
+                 const double *SLACG_RESTRICT r3,
+                 const double *SLACG_RESTRICT x_x,
+                 const double *SLACG_RESTRICT x_y,
+                 const double *SLACG_RESTRICT x_z,
+                 double *SLACG_RESTRICT y_x,
+                 double *SLACG_RESTRICT y_y,
+                 double *SLACG_RESTRICT y_z) {{
     add_upper_symmetric_Hx_to_y(H_data, x_x, y_x);
 
 {add_CTx_and_Cx_to_y_impl}
@@ -487,23 +533,33 @@ void add_Kx_to_y(const double *H_data, const double *C_data,
     }}
 }}
 
-void add_upper_symmetric_Hx_to_y(const double *H_data, const double *x, double *y) {{
+void add_upper_symmetric_Hx_to_y(const double *SLACG_RESTRICT H_data,
+                                 const double *SLACG_RESTRICT x,
+                                 double *SLACG_RESTRICT y) {{
 {add_upper_symmetric_Hx_to_y_impl}
 }}
 
-void add_CTx_to_y(const double *C_data, const double *x, double *y) {{
+void add_CTx_to_y(const double *SLACG_RESTRICT C_data,
+                  const double *SLACG_RESTRICT x,
+                  double *SLACG_RESTRICT y) {{
 {add_CTx_to_y_impl}
 }}
 
-void add_Cx_to_y(const double *C_data, const double *x, double *y) {{
+void add_Cx_to_y(const double *SLACG_RESTRICT C_data,
+                 const double *SLACG_RESTRICT x,
+                 double *SLACG_RESTRICT y) {{
 {add_Cx_to_y_impl}
 }}
 
-void add_GTx_to_y(const double *G_data, const double *x, double *y) {{
+void add_GTx_to_y(const double *SLACG_RESTRICT G_data,
+                  const double *SLACG_RESTRICT x,
+                  double *SLACG_RESTRICT y) {{
 {add_GTx_to_y_impl}
 }}
 
-void add_Gx_to_y(const double *G_data, const double *x, double *y) {{
+void add_Gx_to_y(const double *SLACG_RESTRICT G_data,
+                 const double *SLACG_RESTRICT x,
+                 double *SLACG_RESTRICT y) {{
 {add_Gx_to_y_impl}
 }}
 

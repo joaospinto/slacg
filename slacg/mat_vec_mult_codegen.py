@@ -1,5 +1,7 @@
 import scipy as sp
 
+from slacg.internal.common import RESTRICT_MACRO
+
 
 def mat_vec_mult_codegen(M, namespace, header_name):
     assert sp.sparse.issparse(M)
@@ -9,6 +11,8 @@ def mat_vec_mult_codegen(M, namespace, header_name):
 
     cpp_header_code = f"""
 #pragma once
+
+{RESTRICT_MACRO}
 
 namespace {namespace} {{
 """
@@ -46,11 +50,15 @@ namespace {namespace} {{
 
         cpp_header_code += """
 // Performs y += A @ x, where A_data is expected to represent np.triu(A) in CSC order.
-void add_upper_symmetric_Ax_to_y(const double* A_data, const double* x, double* y);
+void add_upper_symmetric_Ax_to_y(const double* SLACG_RESTRICT A_data,
+                                 const double* SLACG_RESTRICT x,
+                                 double* SLACG_RESTRICT y);
 """
 
         cpp_impl_code += f"""
-void add_upper_symmetric_Ax_to_y(const double* A_data, const double* x, double* y) {{
+void add_upper_symmetric_Ax_to_y(const double* SLACG_RESTRICT A_data,
+                                 const double* SLACG_RESTRICT x,
+                                 double* SLACG_RESTRICT y) {{
 {add_upper_symmetric_Ax_to_y_impl}
 }}
 """
@@ -73,17 +81,25 @@ void add_upper_symmetric_Ax_to_y(const double* A_data, const double* x, double* 
 
         cpp_header_code += """
 // Performs y += A @ x, where A_data is expected to be in CSC order.
-void add_Ax_to_y(const double* A_data, const double* x, double* y);
+void add_Ax_to_y(const double* SLACG_RESTRICT A_data,
+                 const double* SLACG_RESTRICT x,
+                 double* SLACG_RESTRICT y);
 
 // Performs y += A.T @ x, where A_data is expected to be in CSC order.
-void add_ATx_to_y(const double* A_data, const double* x, double* y);
+void add_ATx_to_y(const double* SLACG_RESTRICT A_data,
+                  const double* SLACG_RESTRICT x,
+                  double* SLACG_RESTRICT y);
 """
 
         cpp_impl_code += f"""
-void add_Ax_to_y(const double* A_data, const double* x, double* y) {{
+void add_Ax_to_y(const double* SLACG_RESTRICT A_data,
+                 const double* SLACG_RESTRICT x,
+                 double* SLACG_RESTRICT y) {{
 {add_Ax_to_y_impl}}}
 
-void add_ATx_to_y(const double* A_data, const double* x, double* y) {{
+void add_ATx_to_y(const double* SLACG_RESTRICT A_data,
+                  const double* SLACG_RESTRICT x,
+                  double* SLACG_RESTRICT y) {{
 {add_ATx_to_y_impl}}}
 """
 

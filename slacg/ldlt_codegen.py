@@ -1,7 +1,7 @@
-import numpy as np
 import scipy as sp
+import numpy as np
 
-from slacg.internal.common import build_sparse_LT
+from slacg.internal.common import RESTRICT_MACRO, build_sparse_LT
 
 
 # NOTE:
@@ -167,6 +167,8 @@ def ldlt_codegen(M, P, namespace, header_name):
 
     cpp_header_code = f"""#pragma once
 
+{RESTRICT_MACRO}
+
 namespace {namespace} {{
 
 constexpr int L_nnz = {L_nnz};
@@ -176,11 +178,16 @@ constexpr int dim = {dim};
 // Performs an L D L^T decomposition of the A matrix,
 // where A_data is expected to represent np.triu(A) in CSC order.
 // NOTE: LT_data and D_inv should have sizes L_nnz={L_nnz} and dim={dim} respectively.
-void ldlt_factor(const double* A_data, double* LT_data, double* D_inv);
+void ldlt_factor(const double* SLACG_RESTRICT A_data,
+                 double* SLACG_RESTRICT LT_data,
+                 double* SLACG_RESTRICT D_inv);
 
 // Solves A * x = b, given a pre-computed L D L^T factorization of A.
 // LT_data and D_inv can be computed via the ldlt_factor method defined above.
-void ldlt_solve(const double* LT_data, const double* D_inv, const double* b, double* x);
+void ldlt_solve(const double* SLACG_RESTRICT LT_data,
+                const double* SLACG_RESTRICT D_inv,
+                const double* SLACG_RESTRICT b,
+                double* SLACG_RESTRICT x);
 
 }}  // namespace {namespace}\n"""
 
@@ -190,18 +197,27 @@ void ldlt_solve(const double* LT_data, const double* D_inv, const double* b, dou
 
 namespace {namespace} {{
 
-void ldlt_factor(const double* A_data, double* LT_data, double* D_inv) {{
+void ldlt_factor(const double* SLACG_RESTRICT A_data,
+                 double* SLACG_RESTRICT LT_data,
+                 double* SLACG_RESTRICT D_inv) {{
 {ldlt_impl}}}
 
 namespace {{
-void solve_lower_unitriangular(const double* LT_data, const double* b, double* x) {{
+void solve_lower_unitriangular(const double* SLACG_RESTRICT LT_data,
+                               const double* SLACG_RESTRICT b,
+                               double* SLACG_RESTRICT x) {{
 {solve_lower_unitriangular_impl}}}
 
-void solve_upper_unitriangular(const double* LT_data, const double* b, double* x) {{
+void solve_upper_unitriangular(const double* SLACG_RESTRICT LT_data,
+                               const double* SLACG_RESTRICT b,
+                               double* SLACG_RESTRICT x) {{
 {solve_upper_unitriangular_impl}}}
 }} // namespace
 
-void ldlt_solve(const double* LT_data, const double* D_inv, const double* b, double* x) {{
+void ldlt_solve(const double* SLACG_RESTRICT LT_data,
+                const double* SLACG_RESTRICT D_inv,
+                const double* SLACG_RESTRICT b,
+                double* SLACG_RESTRICT x) {{
     std::array<double, {dim}> tmp1;
     std::array<double, {dim}> tmp2;
 {permute_b}
