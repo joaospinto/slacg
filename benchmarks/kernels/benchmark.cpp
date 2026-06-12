@@ -123,10 +123,10 @@ void run_kkt_factor(const int iterations) {
 
   print_result("kkt_ldlt_factor", iterations,
                benchmark_ns_per_call(iterations, [&] {
-                 slacg::bench::kkt::ldlt_factor(
+                 static_cast<void>(slacg::bench::kkt::ldlt_factor(
                      H_data.data(), C_data.data(), G_data.data(), w.data(),
                      1e-3, r2.data(), r3.data(), LT_data.data(),
-                     D_inv.data());
+                     D_inv.data()));
                }));
 }
 
@@ -148,9 +148,9 @@ void run_kkt_solve(const int iterations) {
   fill_data(b);
   r2.fill(1e-3);
   r3.fill(1e-3);
-  slacg::bench::kkt::ldlt_factor(H_data.data(), C_data.data(), G_data.data(),
-                                 w.data(), 1e-3, r2.data(), r3.data(),
-                                 LT_data.data(), D_inv.data());
+  static_cast<void>(slacg::bench::kkt::ldlt_factor(
+      H_data.data(), C_data.data(), G_data.data(), w.data(), 1e-3, r2.data(),
+      r3.data(), LT_data.data(), D_inv.data()));
 
   print_result("kkt_ldlt_solve", iterations,
                benchmark_ns_per_call(iterations, [&] {

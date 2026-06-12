@@ -192,7 +192,11 @@ def kkt_codegen(H, C, G, P, namespace, header_name):
     # NOTE: while the following can be in any order, we sort for consistency.
     L_nz_per_col = [sorted(x) for x in L_nz_set_per_col]
 
-    ldlt_impl = "    double D_i;\n"
+    ldlt_impl = (
+        "    int positive_count = 0;\n"
+        "    int negative_count = 0;\n"
+        "    double D_i;\n"
+    )
 
     if y_dim == 0:
         ldlt_impl += "    (void) C_data;\n    (void) r2;\n"
@@ -243,7 +247,21 @@ def kkt_codegen(H, C, G, P, namespace, header_name):
             ldlt_impl += line
             line = f"    LT_data[{L_ij_idx}] *= D_inv[{j}];\n"
             ldlt_impl += line
+        ldlt_impl += (
+            "    if (D_i > 0.0) {\n"
+            "        ++positive_count;\n"
+            "    } else if (D_i < 0.0) {\n"
+            "        ++negative_count;\n"
+            "    } else {\n"
+            "        return false;\n"
+            "    }\n"
+        )
         ldlt_impl += f"    D_inv[{i}] = 1.0 / D_i;\n"
+
+    ldlt_impl += (
+        f"    return positive_count == {x_dim} && "
+        f"negative_count == {y_dim + z_dim};\n"
+    )
 
     solve_lower_unitriangular_impl = ""
 
@@ -376,8 +394,10 @@ constexpr int z_dim = {z_dim};
 // 1. H_data is expected to represent np.triu(H) in CSC order.
 // 2. C_data and G_data are expected to represent C and G, respectively, in CSC order.
 // 3. W is a diagonal matrix, represented by the vector of its diagonal elements, w.
+// Returns true iff the computed factorization has the expected KKT inertia:
+// x_dim positive pivots and y_dim + z_dim negative pivots.
 // NOTE: LT_data and D_inv should have sizes L_nnz={L_nnz} and dim={dim} respectively.
-void ldlt_factor(const double *H_data, const double *C_data, const double *G_data,
+bool ldlt_factor(const double *H_data, const double *C_data, const double *G_data,
                  const double *w, const double r1, const double *r2, const double *r3,
                  double *LT_data, double *D_inv);
 
@@ -428,7 +448,7 @@ void solve_upper_unitriangular(const double *LT_data, const double *b, double *x
 {solve_upper_unitriangular_impl}}}
 }}  // namespace
 
-void ldlt_factor(const double *H_data, const double *C_data,
+bool ldlt_factor(const double *H_data, const double *C_data,
                  const double *G_data, const double *w, const double r1,
                  const double *r2, const double *r3, double *LT_data, double *D_inv) {{
 {ldlt_impl}}}
