@@ -1,0 +1,34 @@
+load("@rules_cc//cc:defs.bzl", "cc_library", "cc_test")
+load("@rules_python//python:defs.bzl", "py_binary")
+
+py_binary(
+    name = "codegen",
+    srcs = ["codegen.py"],
+    deps = ["//slacg:kkt_codegen"],
+)
+
+genrule(
+    name = "codegen_genrule",
+    outs = [
+        "kkt_codegen.cpp",
+        "kkt_codegen.hpp",
+    ],
+    cmd = "$(location :codegen) $(RULEDIR)",
+    tools = [":codegen"],
+)
+
+cc_library(
+    name = "codegen_output",
+    srcs = ["kkt_codegen.cpp"],
+    hdrs = ["kkt_codegen.hpp"],
+)
+
+cc_test(
+    name = "kkt_test_no_inequalities",
+    srcs = ["test.cpp"],
+    deps = [
+        ":codegen_output",
+        "@googletest//:gtest",
+        "@googletest//:gtest_main",
+    ],
+)

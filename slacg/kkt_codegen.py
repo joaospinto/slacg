@@ -201,7 +201,7 @@ def kkt_codegen(H, C, G, P, namespace, header_name):
     if y_dim == 0:
         ldlt_impl += "    (void) C_data;\n    (void) r2;\n"
     if z_dim == 0:
-        ldlt_impl += "    (void) G_data;\n    (void) r3;\n"
+        ldlt_impl += "    (void) G_data;\n    (void) w;\n    (void) r3;\n"
 
     LT_filled = set()
     D_filled = set()
@@ -360,6 +360,7 @@ def kkt_codegen(H, C, G, P, namespace, header_name):
     if SPARSE_G.nnz == 0:
         add_GTx_to_y_impl += "    (void) G_data;\n    (void) x;\n    (void) y;\n"
         add_Gx_to_y_impl += "    (void) G_data;\n    (void) x;\n    (void) y;\n"
+        add_GTx_and_Gx_to_y_impl += "    (void) G_data;\n"
 
     for j in range(G.shape[1]):
         col_start = SPARSE_G.indptr[j]
