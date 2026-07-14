@@ -3,7 +3,7 @@ import scipy as sp
 
 import sys
 
-from slacg.kkt_codegen import kkt_codegen
+from slacg.kkt_codegen import kkt_codegen, write_generated_files
 
 x_dim = 10
 y_dim = 20
@@ -19,12 +19,15 @@ P = np.arange(dim - 1, -1, -1)
 
 output_prefix = sys.argv[-1]
 
-cpp_header_code, cpp_impl_code = kkt_codegen(
-    H=H, C=C, G=G, P=P, namespace="slacg::test", header_name="kkt_codegen"
+write_generated_files(
+    output_prefix,
+    kkt_codegen(
+        H=H,
+        C=C,
+        G=G,
+        P=P,
+        namespace="slacg::test",
+        header_name="kkt_codegen",
+        num_factor_chunks=2,
+    ),
 )
-
-with open(f"{output_prefix}/kkt_codegen.hpp", "w") as f:
-    f.write(cpp_header_code)
-
-with open(f"{output_prefix}/kkt_codegen.cpp", "w") as f:
-    f.write(cpp_impl_code)

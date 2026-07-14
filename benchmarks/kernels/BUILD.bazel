@@ -1,5 +1,6 @@
 load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_library")
 load("@rules_python//python:defs.bzl", "py_binary")
+load("//:kkt_codegen.bzl", "kkt_codegen_files", "kkt_codegen_sources")
 
 py_binary(
   name = "codegen",
@@ -17,13 +18,11 @@ genrule(
   outs = [
     "gtwg_codegen.cpp",
     "gtwg_codegen.hpp",
-    "kkt_codegen.cpp",
-    "kkt_codegen.hpp",
     "ldlt_codegen.cpp",
     "ldlt_codegen.hpp",
     "mat_vec_mult_codegen.cpp",
     "mat_vec_mult_codegen.hpp",
-  ],
+  ] + kkt_codegen_files("kkt_codegen"),
   cmd = "$(location :codegen) $(RULEDIR) > /dev/null",
   tools = [":codegen"],
 )
@@ -32,10 +31,9 @@ cc_library(
   name = "codegen_output",
   srcs = [
     "gtwg_codegen.cpp",
-    "kkt_codegen.cpp",
     "ldlt_codegen.cpp",
     "mat_vec_mult_codegen.cpp",
-  ],
+  ] + kkt_codegen_sources("kkt_codegen"),
   hdrs = [
     "gtwg_codegen.hpp",
     "kkt_codegen.hpp",

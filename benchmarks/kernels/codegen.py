@@ -4,7 +4,7 @@ import numpy as np
 import scipy as sp
 
 from slacg.gtwg_codegen import gtwg_codegen
-from slacg.kkt_codegen import kkt_codegen
+from slacg.kkt_codegen import kkt_codegen, write_generated_files
 from slacg.ldlt_codegen import ldlt_codegen
 from slacg.mat_vec_mult_codegen import mat_vec_mult_codegen
 
@@ -62,14 +62,6 @@ outputs = {
         namespace="slacg::bench::gtwg",
         header_name="benchmarks/kernels/gtwg_codegen",
     ),
-    "kkt_codegen": kkt_codegen(
-        H=H,
-        C=C,
-        G=G,
-        P=kkt_P,
-        namespace="slacg::bench::kkt",
-        header_name="benchmarks/kernels/kkt_codegen",
-    ),
 }
 
 for name, (cpp_header_code, cpp_impl_code) in outputs.items():
@@ -78,3 +70,15 @@ for name, (cpp_header_code, cpp_impl_code) in outputs.items():
 
     with open(f"{output_prefix}/{name}.cpp", "w") as f:
         f.write(cpp_impl_code)
+
+write_generated_files(
+    output_prefix,
+    kkt_codegen(
+        H=H,
+        C=C,
+        G=G,
+        P=kkt_P,
+        namespace="slacg::bench::kkt",
+        header_name="benchmarks/kernels/kkt_codegen",
+    ),
+)

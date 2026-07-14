@@ -1,7 +1,62 @@
-import scipy as sp
+import re
+from dataclasses import dataclass
+from operator import index
+from pathlib import Path
+
 import numpy as np
+import scipy as sp
 
 from slacg.internal.common import RESTRICT_MACRO, build_sparse_LT
+
+
+@dataclass(frozen=True)
+class GeneratedFile:
+    name: str
+    contents: str
+
+
+def write_generated_files(output_directory, generated_files):
+    output_directory = Path(output_directory)
+    for generated_file in generated_files:
+        (output_directory / generated_file.name).write_text(
+            generated_file.contents, encoding="utf-8"
+        )
+
+
+def _implementation_code(header_name, namespace, system_headers, body):
+    includes = "".join(f"#include <{header}>\n" for header in system_headers)
+    if includes:
+        includes = f"\n{includes}"
+    return f"""#include "{header_name}.hpp"
+{includes}
+namespace {namespace} {{
+
+{body}
+
+}}  // namespace {namespace}
+"""
+
+
+def _partition_contiguous_by_size(items, num_partitions):
+    cumulative_sizes = [0]
+    for item in items:
+        cumulative_sizes.append(cumulative_sizes[-1] + len(item))
+
+    cut_indices = [0]
+    for partition in range(1, num_partitions):
+        minimum = cut_indices[-1] + 1
+        maximum = len(items) - (num_partitions - partition)
+        target = cumulative_sizes[-1] * partition / num_partitions
+        cut_indices.append(
+            min(
+                range(minimum, maximum + 1),
+                key=lambda item_index: abs(cumulative_sizes[item_index] - target),
+            )
+        )
+    cut_indices.append(len(items))
+    return tuple(
+        items[cut_indices[i] : cut_indices[i + 1]] for i in range(num_partitions)
+    )
 
 
 # This file provides utilities for generating efficient code for solving
@@ -27,7 +82,7 @@ from slacg.internal.common import RESTRICT_MACRO, build_sparse_LT
 #    Typically, an AMD ordering is pre-computed for the sparsity pattern.
 
 
-def kkt_codegen(H, C, G, P, namespace, header_name):
+def kkt_codegen(H, C, G, P, namespace, header_name, num_factor_chunks=1):
     assert sp.sparse.issparse(H)
     assert sp.sparse.issparse(C)
     assert sp.sparse.issparse(G)
@@ -46,6 +101,12 @@ def kkt_codegen(H, C, G, P, namespace, header_name):
     y_dim = C.shape[0]
     z_dim = G.shape[0]
     dim = x_dim + y_dim + z_dim
+    try:
+        num_factor_chunks = index(num_factor_chunks)
+    except TypeError as error:
+        raise TypeError("num_factor_chunks must be an integer") from error
+    if num_factor_chunks < 1 or num_factor_chunks > dim:
+        raise ValueError(f"num_factor_chunks must be between 1 and {dim}")
     I_x = sp.sparse.eye(x_dim, format="csc")
     I_y = sp.sparse.eye(y_dim, format="csc")
     I_z = sp.sparse.eye(z_dim, format="csc")
@@ -53,9 +114,7 @@ def kkt_codegen(H, C, G, P, namespace, header_name):
     Zys = Zsy.T
     H = abs(H) + I_x
     # NOTE: only the sparsity patterns matter here.
-    K = sp.sparse.bmat(
-        [[H, C.T, G.T], [C, I_y, Zys], [G, Zsy, I_z]], format="csc"
-    )
+    K = sp.sparse.bmat([[H, C.T, G.T], [C, I_y, Zys], [G, Zsy, I_z]], format="csc")
 
     SPARSE_LT = build_sparse_LT(M=K, P=P)
 
@@ -192,21 +251,19 @@ def kkt_codegen(H, C, G, P, namespace, header_name):
     # NOTE: while the following can be in any order, we sort for consistency.
     L_nz_per_col = [sorted(x) for x in L_nz_set_per_col]
 
-    ldlt_impl = (
-        "    int positive_count = 0;\n"
-        "    int negative_count = 0;\n"
-        "    double D_i;\n"
-    )
+    ldlt_prefix = "    int positive_count = 0;\n    int negative_count = 0;\n"
 
     if y_dim == 0:
-        ldlt_impl += "    (void) C_data;\n    (void) r2;\n"
+        ldlt_prefix += "    (void) C_data;\n    (void) r2;\n"
     if z_dim == 0:
-        ldlt_impl += "    (void) G_data;\n    (void) w;\n    (void) r3;\n"
+        ldlt_prefix += "    (void) G_data;\n    (void) w;\n    (void) r3;\n"
 
     LT_filled = set()
     D_filled = set()
+    ldlt_pivot_implementations = []
 
     for i in range(dim):
+        pivot_implementation = ""
         for j in L_nz_per_row[i]:
             assert (i, j) in L_COORDINATE_MAP
             assert i > j
@@ -223,8 +280,8 @@ def kkt_codegen(H, C, G, P, namespace, header_name):
                 assert L_jk_idx in LT_filled
                 assert k in D_filled
                 line += f" - (LT_data[{L_ik_idx}] * LT_data[{L_jk_idx}])"
-            line += f";\n"
-            ldlt_impl += line
+            line += ";\n"
+            pivot_implementation += line
             LT_filled.add((L_ij_idx))
 
         # Update diagonal and finalize column of LT.
@@ -232,21 +289,21 @@ def kkt_codegen(H, C, G, P, namespace, header_name):
         if (i, i) in N_COORDINATE_MAP:
             line += f"{N_COORDINATE_MAP[(i, i)]};\n"
         else:
-            line += f"0.0;\n"
-        ldlt_impl += line
+            line += "0.0;\n"
+        pivot_implementation += line
         D_filled.add(i)
         for j in L_nz_per_row[i]:
             assert (i, j) in L_COORDINATE_MAP
             L_ij_idx = L_COORDINATE_MAP[(i, j)]
             assert L_ij_idx in LT_filled
             assert j in D_filled
-            ldlt_impl += (
+            pivot_implementation += (
                 f"    const double LT_{i}_{j} = LT_data[{L_ij_idx}];\n"
                 f"    const double normalized_LT_{i}_{j} = LT_{i}_{j} * D_inv[{j}];\n"
                 f"    D_i -= LT_{i}_{j} * normalized_LT_{i}_{j};\n"
                 f"    LT_data[{L_ij_idx}] = normalized_LT_{i}_{j};\n"
             )
-        ldlt_impl += (
+        pivot_implementation += (
             "    if (!std::isfinite(D_i)) {\n"
             "        return FactorStatus::kNonFinitePivot;\n"
             "    }\n"
@@ -258,9 +315,10 @@ def kkt_codegen(H, C, G, P, namespace, header_name):
             "        return FactorStatus::kZeroPivot;\n"
             "    }\n"
         )
-        ldlt_impl += f"    D_inv[{i}] = 1.0 / D_i;\n"
+        pivot_implementation += f"    D_inv[{i}] = 1.0 / D_i;\n"
+        ldlt_pivot_implementations.append(pivot_implementation)
 
-    ldlt_impl += (
+    ldlt_suffix = (
         "    if (positive_count != expected_positive_inertia || "
         "negative_count != expected_negative_inertia) {\n"
         "        return FactorStatus::kWrongInertia;\n"
@@ -317,14 +375,18 @@ def kkt_codegen(H, C, G, P, namespace, header_name):
     add_upper_symmetric_Hx_to_y_impl = ""
 
     if SPARSE_UPPER_H.nnz == 0:
-        add_upper_symmetric_Hx_to_y_impl += "    (void) H_data;\n    (void) x;\n    (void) y;\n"
+        add_upper_symmetric_Hx_to_y_impl += (
+            "    (void) H_data;\n    (void) x;\n    (void) y;\n"
+        )
 
     for j in range(H.shape[1]):
         for k in range(SPARSE_UPPER_H.indptr[j], SPARSE_UPPER_H.indptr[j + 1]):
             i = SPARSE_UPPER_H.indices[k]
             add_upper_symmetric_Hx_to_y_impl += f"    y[{i}] += H_data[{k}] * x[{j}];\n"
             if i != j:
-                add_upper_symmetric_Hx_to_y_impl += f"    y[{j}] += H_data[{k}] * x[{i}];\n"
+                add_upper_symmetric_Hx_to_y_impl += (
+                    f"    y[{j}] += H_data[{k}] * x[{i}];\n"
+                )
 
     add_CTx_to_y_impl = ""
     add_Cx_to_y_impl = ""
@@ -486,36 +548,97 @@ void add_Kx_to_y(const double *SLACG_RESTRICT H_data,
 
 }}  // namespace {namespace}\n"""
 
-    cpp_impl_code = f"""#include "{header_name}.hpp"
+    output_name = header_name.rsplit("/", 1)[-1]
+    factor_chunk_files = ()
+    factor_declarations = ""
+    if num_factor_chunks == 1:
+        ldlt_implementation = (
+            ldlt_prefix
+            + "    double D_i;\n"
+            + "".join(ldlt_pivot_implementations)
+            + ldlt_suffix
+        )
+    else:
+        factor_parameters = (
+            ("const double *SLACG_RESTRICT H_data", "H_data"),
+            ("const double *SLACG_RESTRICT C_data", "C_data"),
+            ("const double *SLACG_RESTRICT G_data", "G_data"),
+            ("const double *SLACG_RESTRICT w", "w"),
+            ("const double r1", "r1"),
+            ("const double *SLACG_RESTRICT r2", "r2"),
+            ("const double *SLACG_RESTRICT r3", "r3"),
+            ("double *SLACG_RESTRICT LT_data", "LT_data"),
+            ("double *SLACG_RESTRICT D_inv", "D_inv"),
+            ("int &positive_count", "positive_count"),
+            ("int &negative_count", "negative_count"),
+        )
+        factor_chunks = _partition_contiguous_by_size(
+            ldlt_pivot_implementations, num_factor_chunks
+        )
+        declarations = []
+        calls = []
+        chunk_files = []
+        for chunk_index, chunk in enumerate(factor_chunks):
+            function_name = f"factor_chunk_{chunk_index}"
+            chunk_body = "".join(chunk)
+            chunk_parameters = tuple(
+                (declaration, name)
+                for declaration, name in factor_parameters
+                if re.search(rf"\b{re.escape(name)}\b", chunk_body)
+            )
+            factor_chunk_arguments = ",\n    ".join(
+                declaration for declaration, _ in chunk_parameters
+            )
+            factor_chunk_call_arguments = ", ".join(
+                name for _, name in chunk_parameters
+            )
+            declarations.append(
+                f"FactorStatus {function_name}({factor_chunk_arguments});"
+            )
+            calls.append(
+                f"    status = internal::{function_name}("
+                f"{factor_chunk_call_arguments});\n"
+                "    if (status != FactorStatus::kSuccess) {\n"
+                "        return status;\n"
+                "    }\n"
+            )
+            chunk_code = (
+                "namespace internal {\n\n"
+                f"FactorStatus {function_name}({factor_chunk_arguments}) {{\n"
+                "    double D_i;\n"
+                + chunk_body
+                + "    return FactorStatus::kSuccess;\n"
+                "}\n\n"
+                "}  // namespace internal"
+            )
+            chunk_files.append(
+                GeneratedFile(
+                    f"{output_name}_factor_chunk_{chunk_index}.cpp",
+                    _implementation_code(
+                        header_name, namespace, ("cmath",), chunk_code
+                    ),
+                )
+            )
+        factor_declarations = (
+            "namespace internal {\n\n"
+            + "\n\n".join(declarations)
+            + "\n\n}  // namespace internal\n\n"
+        )
+        ldlt_implementation = (
+            ldlt_prefix + "    FactorStatus status;\n" + "".join(calls) + ldlt_suffix
+        )
+        factor_chunk_files = tuple(chunk_files)
 
-#include <algorithm>
-#include <array>
-#include <cmath>
-
-namespace {namespace} {{
-
-namespace {{
-void solve_lower_unitriangular(const double *SLACG_RESTRICT LT_data,
-                               const double *SLACG_RESTRICT b,
-                               double *SLACG_RESTRICT x) {{
-{solve_lower_unitriangular_impl}}}
-
-void solve_upper_unitriangular(const double *SLACG_RESTRICT LT_data,
-                               const double *SLACG_RESTRICT b,
-                               double *SLACG_RESTRICT x) {{
-{solve_upper_unitriangular_impl}}}
-}}  // namespace
-
-FactorStatus ldlt_factor_with_status(const double *SLACG_RESTRICT H_data,
-                                      const double *SLACG_RESTRICT C_data,
-                                      const double *SLACG_RESTRICT G_data,
-                                      const double *SLACG_RESTRICT w,
-                                      const double r1,
-                                      const double *SLACG_RESTRICT r2,
-                                      const double *SLACG_RESTRICT r3,
-                                      double *SLACG_RESTRICT LT_data,
-                                      double *SLACG_RESTRICT D_inv) {{
-{ldlt_impl}}}
+    factor_code = f"""{factor_declarations}FactorStatus ldlt_factor_with_status(
+    const double *SLACG_RESTRICT H_data,
+    const double *SLACG_RESTRICT C_data,
+    const double *SLACG_RESTRICT G_data,
+    const double *SLACG_RESTRICT w, const double r1,
+    const double *SLACG_RESTRICT r2,
+    const double *SLACG_RESTRICT r3,
+    double *SLACG_RESTRICT LT_data,
+    double *SLACG_RESTRICT D_inv) {{
+{ldlt_implementation}}}
 
 bool ldlt_factor(const double *SLACG_RESTRICT H_data,
                  const double *SLACG_RESTRICT C_data,
@@ -527,7 +650,19 @@ bool ldlt_factor(const double *SLACG_RESTRICT H_data,
                  double *SLACG_RESTRICT D_inv) {{
     return ldlt_factor_with_status(H_data, C_data, G_data, w, r1, r2, r3,
                                    LT_data, D_inv) == FactorStatus::kSuccess;
-}}
+}}"""
+
+    solve_code = f"""namespace {{
+void solve_lower_unitriangular(const double *SLACG_RESTRICT LT_data,
+                               const double *SLACG_RESTRICT b,
+                               double *SLACG_RESTRICT x) {{
+{solve_lower_unitriangular_impl}}}
+
+void solve_upper_unitriangular(const double *SLACG_RESTRICT LT_data,
+                               const double *SLACG_RESTRICT b,
+                               double *SLACG_RESTRICT x) {{
+{solve_upper_unitriangular_impl}}}
+}}  // namespace
 
 void ldlt_solve(const double *SLACG_RESTRICT LT_data,
                 const double *SLACG_RESTRICT D_inv,
@@ -540,7 +675,14 @@ void ldlt_solve(const double *SLACG_RESTRICT LT_data,
 {scale_diagonal}
     solve_upper_unitriangular(LT_data, tmp1.data(), tmp2.data());
 
-{permute_solution}}}
+{permute_solution}}}"""
+
+    hessian_and_kkt_product_code = f"""void add_upper_symmetric_Hx_to_y(
+    const double *SLACG_RESTRICT H_data,
+    const double *SLACG_RESTRICT x,
+    double *SLACG_RESTRICT y) {{
+{add_upper_symmetric_Hx_to_y_impl}
+}}
 
 void add_Kx_to_y(const double *SLACG_RESTRICT H_data,
                  const double *SLACG_RESTRICT C_data,
@@ -571,17 +713,12 @@ void add_Kx_to_y(const double *SLACG_RESTRICT H_data,
     for (int i = 0; i < {z_dim}; ++i) {{
       y_z[i] -= (w[i] + r3[i]) * x_z[i];
     }}
-}}
+}}"""
 
-void add_upper_symmetric_Hx_to_y(const double *SLACG_RESTRICT H_data,
-                                 const double *SLACG_RESTRICT x,
-                                 double *SLACG_RESTRICT y) {{
-{add_upper_symmetric_Hx_to_y_impl}
-}}
-
-void add_CTx_to_y(const double *SLACG_RESTRICT C_data,
-                  const double *SLACG_RESTRICT x,
-                  double *SLACG_RESTRICT y) {{
+    equality_product_code = f"""void add_CTx_to_y(
+    const double *SLACG_RESTRICT C_data,
+    const double *SLACG_RESTRICT x,
+    double *SLACG_RESTRICT y) {{
 {add_CTx_to_y_impl}
 }}
 
@@ -589,11 +726,12 @@ void add_Cx_to_y(const double *SLACG_RESTRICT C_data,
                  const double *SLACG_RESTRICT x,
                  double *SLACG_RESTRICT y) {{
 {add_Cx_to_y_impl}
-}}
+}}"""
 
-void add_GTx_to_y(const double *SLACG_RESTRICT G_data,
-                  const double *SLACG_RESTRICT x,
-                  double *SLACG_RESTRICT y) {{
+    inequality_product_code = f"""void add_GTx_to_y(
+    const double *SLACG_RESTRICT G_data,
+    const double *SLACG_RESTRICT x,
+    double *SLACG_RESTRICT y) {{
 {add_GTx_to_y_impl}
 }}
 
@@ -601,8 +739,36 @@ void add_Gx_to_y(const double *SLACG_RESTRICT G_data,
                  const double *SLACG_RESTRICT x,
                  double *SLACG_RESTRICT y) {{
 {add_Gx_to_y_impl}
-}}
+}}"""
 
-}} // namespace {namespace}\n"""
-
-    return cpp_header_code, cpp_impl_code
+    return (
+        GeneratedFile(f"{output_name}.hpp", cpp_header_code),
+        GeneratedFile(
+            f"{output_name}_factor.cpp",
+            _implementation_code(
+                header_name,
+                namespace,
+                ("cmath",) if num_factor_chunks == 1 else (),
+                factor_code,
+            ),
+        ),
+        GeneratedFile(
+            f"{output_name}_solve.cpp",
+            _implementation_code(header_name, namespace, ("array",), solve_code),
+        ),
+        GeneratedFile(
+            f"{output_name}_hessian_and_kkt_product.cpp",
+            _implementation_code(
+                header_name, namespace, (), hessian_and_kkt_product_code
+            ),
+        ),
+        GeneratedFile(
+            f"{output_name}_equality_product.cpp",
+            _implementation_code(header_name, namespace, (), equality_product_code),
+        ),
+        GeneratedFile(
+            f"{output_name}_inequality_product.cpp",
+            _implementation_code(header_name, namespace, (), inequality_product_code),
+        ),
+        *factor_chunk_files,
+    )
