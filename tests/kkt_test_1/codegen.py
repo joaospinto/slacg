@@ -28,6 +28,9 @@ write_generated_files(
         P=P,
         namespace="slacg::test",
         header_name="kkt_codegen",
+        bordered_x_indices=(x_dim - 1,),
         num_factor_chunks=2,
+        num_product_chunks=4,
+        num_solve_chunks=3,
     ),
 )

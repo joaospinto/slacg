@@ -174,7 +174,9 @@ void run_kkt_factor(const int iterations, const int samples) {
   std::array<double, slacg::bench::kkt::y_dim> r2{};
   std::array<double, slacg::bench::kkt::z_dim> r3{};
   std::array<double, slacg::bench::kkt::L_nnz> LT_data{};
-  std::array<double, slacg::bench::kkt::dim> D_inv{};
+  std::array<double, slacg::bench::kkt::core_dim> D_inv{};
+  std::array<double, slacg::bench::kkt::border_solution_size> border_solution{};
+  std::array<double, slacg::bench::kkt::border_factor_size> border_factor{};
   fill_data(H_data);
   fill_data(C_data);
   fill_data(G_data);
@@ -189,7 +191,8 @@ void run_kkt_factor(const int iterations, const int samples) {
                      static_cast<void>(slacg::bench::kkt::ldlt_factor(
                          H_data.data(), C_data.data(), G_data.data(), w.data(),
                          1e-3, r2.data(), r3.data(), LT_data.data(),
-                         D_inv.data()));
+                         D_inv.data(), border_solution.data(),
+                         border_factor.data()));
                    },
                    [&] { return checksum(LT_data) + checksum(D_inv); }));
 }
@@ -202,7 +205,9 @@ void run_kkt_solve(const int iterations, const int samples) {
   std::array<double, slacg::bench::kkt::y_dim> r2{};
   std::array<double, slacg::bench::kkt::z_dim> r3{};
   std::array<double, slacg::bench::kkt::L_nnz> LT_data{};
-  std::array<double, slacg::bench::kkt::dim> D_inv{};
+  std::array<double, slacg::bench::kkt::core_dim> D_inv{};
+  std::array<double, slacg::bench::kkt::border_solution_size> border_solution{};
+  std::array<double, slacg::bench::kkt::border_factor_size> border_factor{};
   std::array<double, slacg::bench::kkt::dim> b{};
   std::array<double, slacg::bench::kkt::dim> x{};
   fill_data(H_data);
@@ -214,14 +219,16 @@ void run_kkt_solve(const int iterations, const int samples) {
   r3.fill(1e-3);
   static_cast<void>(slacg::bench::kkt::ldlt_factor(
       H_data.data(), C_data.data(), G_data.data(), w.data(), 1e-3, r2.data(),
-      r3.data(), LT_data.data(), D_inv.data()));
+      r3.data(), LT_data.data(), D_inv.data(), border_solution.data(),
+      border_factor.data()));
 
   print_result("kkt_ldlt_solve", iterations,
                benchmark_samples(
                    iterations, samples,
                    [&] {
-                     slacg::bench::kkt::ldlt_solve(LT_data.data(), D_inv.data(),
-                                                   b.data(), x.data());
+                     slacg::bench::kkt::ldlt_solve(
+                         LT_data.data(), D_inv.data(), border_solution.data(),
+                         border_factor.data(), b.data(), x.data());
                    },
                    [&] { return checksum(x); }));
 }

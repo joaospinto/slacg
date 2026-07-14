@@ -12,14 +12,24 @@ py_binary(
 
 genrule(
   name="codegen_genrule",
-  outs = kkt_codegen_files("kkt_codegen", num_factor_chunks = 2),
+  outs = kkt_codegen_files(
+    "kkt_codegen",
+    num_factor_chunks = 2,
+    num_product_chunks = 4,
+    num_solve_chunks = 3,
+  ),
   cmd = "$(location :codegen) $(RULEDIR) > /dev/null",
   tools = [":codegen"],
 )
 
 cc_library(
   name = "codegen_output",
-  srcs = kkt_codegen_sources("kkt_codegen", num_factor_chunks = 2),
+  srcs = kkt_codegen_sources(
+    "kkt_codegen",
+    num_factor_chunks = 2,
+    num_product_chunks = 4,
+    num_solve_chunks = 3,
+  ),
   hdrs = [
     "kkt_codegen.hpp",
   ],

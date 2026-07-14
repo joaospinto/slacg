@@ -10,6 +10,43 @@ static_assert(expected_positive_inertia == x_dim);
 static_assert(expected_negative_inertia == y_dim + z_dim);
 static_assert(expected_zero_inertia == 0);
 
+struct FactorWorkspace {
+  std::array<double, L_nnz> L;
+  std::array<double, core_dim> D_inv;
+  std::array<double, border_solution_size> border_solution;
+  std::array<double, border_factor_size> border_factor;
+};
+
+struct FactorResult {
+  FactorStatus status;
+  bool success;
+};
+
+FactorResult factor_with_border_diagonal(const double border_diagonal) {
+  auto H_data = std::array<double, x_dim>{};
+  auto C_data = std::array<double, x_dim * y_dim>{};
+  auto G_data = std::array<double, x_dim * z_dim>{};
+  auto s = std::array<double, z_dim>{};
+  auto r2 = std::array<double, y_dim>{};
+  auto r3 = std::array<double, z_dim>{};
+  H_data.fill(1.0);
+  H_data.back() = border_diagonal;
+  s.fill(1.0);
+  r2.fill(1e-3);
+  r3.fill(1e-3);
+  FactorWorkspace factor;
+
+  const FactorStatus status = ldlt_factor_with_status(
+      H_data.data(), C_data.data(), G_data.data(), s.data(), 0.0, r2.data(),
+      r3.data(), factor.L.data(), factor.D_inv.data(),
+      factor.border_solution.data(), factor.border_factor.data());
+  const bool success =
+      ldlt_factor(H_data.data(), C_data.data(), G_data.data(), s.data(), 0.0,
+                  r2.data(), r3.data(), factor.L.data(), factor.D_inv.data(),
+                  factor.border_solution.data(), factor.border_factor.data());
+  return {status, success};
+}
+
 TEST(SLACG, Test) {
   auto H_data = std::array<double, x_dim>{};
   auto C_data = std::array<double, x_dim * y_dim>{};
@@ -25,8 +62,7 @@ TEST(SLACG, Test) {
   r2.fill(1e-3);
   r3.fill(1e-3);
 
-  std::array<double, L_nnz> L_data;
-  std::array<double, dim> D_inv;
+  FactorWorkspace factor;
 
   auto b = std::array<double, dim>{};
   b.fill(1.0);
@@ -34,14 +70,18 @@ TEST(SLACG, Test) {
   std::array<double, dim> x;
 
   EXPECT_TRUE(ldlt_factor(H_data.data(), C_data.data(), G_data.data(), s.data(),
-                          r1, r2.data(), r3.data(), L_data.data(),
-                          D_inv.data()));
-  EXPECT_EQ(ldlt_factor_with_status(H_data.data(), C_data.data(), G_data.data(),
-                                    s.data(), r1, r2.data(), r3.data(),
-                                    L_data.data(), D_inv.data()),
+                          r1, r2.data(), r3.data(), factor.L.data(),
+                          factor.D_inv.data(), factor.border_solution.data(),
+                          factor.border_factor.data()));
+  EXPECT_EQ(ldlt_factor_with_status(
+                H_data.data(), C_data.data(), G_data.data(), s.data(), r1,
+                r2.data(), r3.data(), factor.L.data(), factor.D_inv.data(),
+                factor.border_solution.data(), factor.border_factor.data()),
             FactorStatus::kSuccess);
 
-  ldlt_solve(L_data.data(), D_inv.data(), b.data(), x.data());
+  ldlt_solve(factor.L.data(), factor.D_inv.data(),
+             factor.border_solution.data(), factor.border_factor.data(),
+             b.data(), x.data());
 
   std::array<double, dim> y;
 
@@ -80,15 +120,16 @@ TEST(SLACG, DetectsWrongInertia) {
   r2.fill(1e-3);
   r3.fill(1e-3);
 
-  std::array<double, L_nnz> L_data;
-  std::array<double, dim> D_inv;
+  FactorWorkspace factor;
 
   EXPECT_FALSE(ldlt_factor(H_data.data(), C_data.data(), G_data.data(),
-                           s.data(), r1, r2.data(), r3.data(), L_data.data(),
-                           D_inv.data()));
-  EXPECT_EQ(ldlt_factor_with_status(H_data.data(), C_data.data(), G_data.data(),
-                                    s.data(), r1, r2.data(), r3.data(),
-                                    L_data.data(), D_inv.data()),
+                           s.data(), r1, r2.data(), r3.data(), factor.L.data(),
+                           factor.D_inv.data(), factor.border_solution.data(),
+                           factor.border_factor.data()));
+  EXPECT_EQ(ldlt_factor_with_status(
+                H_data.data(), C_data.data(), G_data.data(), s.data(), r1,
+                r2.data(), r3.data(), factor.L.data(), factor.D_inv.data(),
+                factor.border_solution.data(), factor.border_factor.data()),
             FactorStatus::kWrongInertia);
 }
 
@@ -107,15 +148,16 @@ TEST(SLACG, DetectsNonFinitePivot) {
   r2.fill(1e-3);
   r3.fill(1e-3);
 
-  std::array<double, L_nnz> L_data;
-  std::array<double, dim> D_inv;
+  FactorWorkspace factor;
 
   EXPECT_FALSE(ldlt_factor(H_data.data(), C_data.data(), G_data.data(),
-                           s.data(), r1, r2.data(), r3.data(), L_data.data(),
-                           D_inv.data()));
-  EXPECT_EQ(ldlt_factor_with_status(H_data.data(), C_data.data(), G_data.data(),
-                                    s.data(), r1, r2.data(), r3.data(),
-                                    L_data.data(), D_inv.data()),
+                           s.data(), r1, r2.data(), r3.data(), factor.L.data(),
+                           factor.D_inv.data(), factor.border_solution.data(),
+                           factor.border_factor.data()));
+  EXPECT_EQ(ldlt_factor_with_status(
+                H_data.data(), C_data.data(), G_data.data(), s.data(), r1,
+                r2.data(), r3.data(), factor.L.data(), factor.D_inv.data(),
+                factor.border_solution.data(), factor.border_factor.data()),
             FactorStatus::kNonFinitePivot);
 }
 
@@ -134,16 +176,36 @@ TEST(SLACG, DetectsZeroPivot) {
   r2.fill(0.0);
   r3.fill(0.0);
 
-  std::array<double, L_nnz> L_data;
-  std::array<double, dim> D_inv;
+  FactorWorkspace factor;
 
   EXPECT_FALSE(ldlt_factor(H_data.data(), C_data.data(), G_data.data(),
-                           s.data(), r1, r2.data(), r3.data(), L_data.data(),
-                           D_inv.data()));
-  EXPECT_EQ(ldlt_factor_with_status(H_data.data(), C_data.data(), G_data.data(),
-                                    s.data(), r1, r2.data(), r3.data(),
-                                    L_data.data(), D_inv.data()),
+                           s.data(), r1, r2.data(), r3.data(), factor.L.data(),
+                           factor.D_inv.data(), factor.border_solution.data(),
+                           factor.border_factor.data()));
+  EXPECT_EQ(ldlt_factor_with_status(
+                H_data.data(), C_data.data(), G_data.data(), s.data(), r1,
+                r2.data(), r3.data(), factor.L.data(), factor.D_inv.data(),
+                factor.border_solution.data(), factor.border_factor.data()),
             FactorStatus::kZeroPivot);
+}
+
+TEST(SLACG, DetectsWrongBorderInertia) {
+  const FactorResult result = factor_with_border_diagonal(-1.0);
+  EXPECT_EQ(result.status, FactorStatus::kWrongInertia);
+  EXPECT_FALSE(result.success);
+}
+
+TEST(SLACG, DetectsNonFiniteBorderPivot) {
+  const FactorResult result =
+      factor_with_border_diagonal(std::numeric_limits<double>::infinity());
+  EXPECT_EQ(result.status, FactorStatus::kNonFinitePivot);
+  EXPECT_FALSE(result.success);
+}
+
+TEST(SLACG, DetectsZeroBorderPivot) {
+  const FactorResult result = factor_with_border_diagonal(0.0);
+  EXPECT_EQ(result.status, FactorStatus::kZeroPivot);
+  EXPECT_FALSE(result.success);
 }
 
 } // namespace slacg::test

@@ -10,14 +10,14 @@ py_binary(
 
 genrule(
     name = "codegen_genrule",
-    outs = kkt_codegen_files("kkt_codegen"),
+    outs = kkt_codegen_files("kkt_codegen", num_solve_chunks = 2),
     cmd = "$(location :codegen) $(RULEDIR)",
     tools = [":codegen"],
 )
 
 cc_library(
     name = "codegen_output",
-    srcs = kkt_codegen_sources("kkt_codegen"),
+    srcs = kkt_codegen_sources("kkt_codegen", num_solve_chunks = 2),
     hdrs = ["kkt_codegen.hpp"],
 )
 

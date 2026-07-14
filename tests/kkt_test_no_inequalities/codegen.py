@@ -24,5 +24,6 @@ write_generated_files(
         P=P,
         namespace="slacg::test",
         header_name="kkt_codegen",
+        num_solve_chunks=2,
     ),
 )
