@@ -190,7 +190,7 @@ void run_kkt_factor(const int iterations, const int samples) {
                    [&] {
                      static_cast<void>(slacg::bench::kkt::ldlt_factor(
                          H_data.data(), C_data.data(), G_data.data(), w.data(),
-                         1e-3, r2.data(), r3.data(), LT_data.data(),
+                         1e-3, r2.data(), r3.data(), nullptr, LT_data.data(),
                          D_inv.data(), border_solution.data(),
                          border_factor.data()));
                    },
@@ -219,7 +219,7 @@ void run_kkt_solve(const int iterations, const int samples) {
   r3.fill(1e-3);
   static_cast<void>(slacg::bench::kkt::ldlt_factor(
       H_data.data(), C_data.data(), G_data.data(), w.data(), 1e-3, r2.data(),
-      r3.data(), LT_data.data(), D_inv.data(), border_solution.data(),
+      r3.data(), nullptr, LT_data.data(), D_inv.data(), border_solution.data(),
       border_factor.data()));
 
   print_result("kkt_ldlt_solve", iterations,
@@ -266,8 +266,8 @@ void run_kkt_add_Kx(const int iterations, const int samples) {
             y_z.fill(0.0);
             slacg::bench::kkt::add_Kx_to_y(
                 H_data.data(), C_data.data(), G_data.data(), w.data(), 1e-3,
-                r2.data(), r3.data(), x_x.data(), x_y.data(), x_z.data(),
-                y_x.data(), y_y.data(), y_z.data());
+                r2.data(), r3.data(), nullptr, x_x.data(), x_y.data(),
+                x_z.data(), y_x.data(), y_y.data(), y_z.data());
           },
           [&] { return checksum(y_x) + checksum(y_y) + checksum(y_z); }));
 }
