@@ -171,6 +171,7 @@ void run_kkt_factor(const int iterations, const int samples) {
   std::array<double, 96> C_data{};
   std::array<double, 120> G_data{};
   std::array<double, slacg::bench::kkt::z_dim> w{};
+  std::array<double, slacg::bench::kkt::x_dim> r1{};
   std::array<double, slacg::bench::kkt::y_dim> r2{};
   std::array<double, slacg::bench::kkt::z_dim> r3{};
   std::array<double, slacg::bench::kkt::L_nnz> LT_data{};
@@ -181,6 +182,7 @@ void run_kkt_factor(const int iterations, const int samples) {
   fill_data(C_data);
   fill_data(G_data);
   fill_data(w);
+  r1.fill(1e-3);
   r2.fill(1e-3);
   r3.fill(1e-3);
 
@@ -190,7 +192,7 @@ void run_kkt_factor(const int iterations, const int samples) {
                    [&] {
                      static_cast<void>(slacg::bench::kkt::ldlt_factor(
                          H_data.data(), C_data.data(), G_data.data(), w.data(),
-                         1e-3, r2.data(), r3.data(), nullptr, LT_data.data(),
+                         r1.data(), r2.data(), r3.data(), LT_data.data(),
                          D_inv.data(), border_solution.data(),
                          border_factor.data()));
                    },
@@ -202,6 +204,7 @@ void run_kkt_solve(const int iterations, const int samples) {
   std::array<double, 96> C_data{};
   std::array<double, 120> G_data{};
   std::array<double, slacg::bench::kkt::z_dim> w{};
+  std::array<double, slacg::bench::kkt::x_dim> r1{};
   std::array<double, slacg::bench::kkt::y_dim> r2{};
   std::array<double, slacg::bench::kkt::z_dim> r3{};
   std::array<double, slacg::bench::kkt::L_nnz> LT_data{};
@@ -215,12 +218,13 @@ void run_kkt_solve(const int iterations, const int samples) {
   fill_data(G_data);
   fill_data(w);
   fill_data(b);
+  r1.fill(1e-3);
   r2.fill(1e-3);
   r3.fill(1e-3);
   static_cast<void>(slacg::bench::kkt::ldlt_factor(
-      H_data.data(), C_data.data(), G_data.data(), w.data(), 1e-3, r2.data(),
-      r3.data(), nullptr, LT_data.data(), D_inv.data(), border_solution.data(),
-      border_factor.data()));
+      H_data.data(), C_data.data(), G_data.data(), w.data(), r1.data(),
+      r2.data(), r3.data(), LT_data.data(), D_inv.data(),
+      border_solution.data(), border_factor.data()));
 
   print_result("kkt_ldlt_solve", iterations,
                benchmark_samples(
@@ -238,6 +242,7 @@ void run_kkt_add_Kx(const int iterations, const int samples) {
   std::array<double, 96> C_data{};
   std::array<double, 120> G_data{};
   std::array<double, slacg::bench::kkt::z_dim> w{};
+  std::array<double, slacg::bench::kkt::x_dim> r1{};
   std::array<double, slacg::bench::kkt::y_dim> r2{};
   std::array<double, slacg::bench::kkt::z_dim> r3{};
   std::array<double, slacg::bench::kkt::x_dim> x_x{};
@@ -253,6 +258,7 @@ void run_kkt_add_Kx(const int iterations, const int samples) {
   fill_data(x_x);
   fill_data(x_y);
   fill_data(x_z);
+  r1.fill(1e-3);
   r2.fill(1e-3);
   r3.fill(1e-3);
 
@@ -265,8 +271,8 @@ void run_kkt_add_Kx(const int iterations, const int samples) {
             y_y.fill(0.0);
             y_z.fill(0.0);
             slacg::bench::kkt::add_Kx_to_y(
-                H_data.data(), C_data.data(), G_data.data(), w.data(), 1e-3,
-                r2.data(), r3.data(), nullptr, x_x.data(), x_y.data(),
+                H_data.data(), C_data.data(), G_data.data(), w.data(),
+                r1.data(), r2.data(), r3.data(), x_x.data(), x_y.data(),
                 x_z.data(), y_x.data(), y_y.data(), y_z.data());
           },
           [&] { return checksum(y_x) + checksum(y_y) + checksum(y_z); }));

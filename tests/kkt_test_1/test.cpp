@@ -27,22 +27,24 @@ FactorResult factor_with_border_diagonal(const double border_diagonal) {
   auto C_data = std::array<double, x_dim * y_dim>{};
   auto G_data = std::array<double, x_dim * z_dim>{};
   auto s = std::array<double, z_dim>{};
+  auto r1 = std::array<double, x_dim>{};
   auto r2 = std::array<double, y_dim>{};
   auto r3 = std::array<double, z_dim>{};
   H_data.fill(1.0);
   H_data.back() = border_diagonal;
   s.fill(1.0);
+  r1.fill(0.0);
   r2.fill(1e-3);
   r3.fill(1e-3);
   FactorWorkspace factor;
 
   const FactorStatus status = ldlt_factor_with_status(
-      H_data.data(), C_data.data(), G_data.data(), s.data(), 0.0, r2.data(),
-      r3.data(), nullptr, factor.L.data(), factor.D_inv.data(),
+      H_data.data(), C_data.data(), G_data.data(), s.data(), r1.data(),
+      r2.data(), r3.data(), factor.L.data(), factor.D_inv.data(),
       factor.border_solution.data(), factor.border_factor.data());
   const bool success = ldlt_factor(
-      H_data.data(), C_data.data(), G_data.data(), s.data(), 0.0, r2.data(),
-      r3.data(), nullptr, factor.L.data(), factor.D_inv.data(),
+      H_data.data(), C_data.data(), G_data.data(), s.data(), r1.data(),
+      r2.data(), r3.data(), factor.L.data(), factor.D_inv.data(),
       factor.border_solution.data(), factor.border_factor.data());
   return {status, success};
 }
@@ -56,13 +58,14 @@ TEST(SLACG, Test) {
   C_data.fill(1.0);
   G_data.fill(1.0);
   s.fill(1.0);
-  constexpr double r1 = 1e-3;
+  auto r1 = std::array<double, x_dim>{};
   auto r2 = std::array<double, y_dim>{};
   auto r3 = std::array<double, z_dim>{};
-  auto bound_diagonal = std::array<double, x_dim>{};
+  for (int i = 0; i < x_dim; ++i) {
+    r1[i] = 1e-3 + 0.01 * static_cast<double>(i + 1);
+  }
   r2.fill(1e-3);
   r3.fill(1e-3);
-  bound_diagonal.fill(0.25);
 
   FactorWorkspace factor;
 
@@ -71,15 +74,15 @@ TEST(SLACG, Test) {
 
   std::array<double, dim> x;
 
-  EXPECT_TRUE(ldlt_factor(
-      H_data.data(), C_data.data(), G_data.data(), s.data(), r1, r2.data(),
-      r3.data(), bound_diagonal.data(), factor.L.data(), factor.D_inv.data(),
-      factor.border_solution.data(), factor.border_factor.data()));
-  EXPECT_EQ(ldlt_factor_with_status(
-                H_data.data(), C_data.data(), G_data.data(), s.data(), r1,
-                r2.data(), r3.data(), bound_diagonal.data(), factor.L.data(),
-                factor.D_inv.data(), factor.border_solution.data(),
-                factor.border_factor.data()),
+  EXPECT_TRUE(ldlt_factor(H_data.data(), C_data.data(), G_data.data(), s.data(),
+                          r1.data(), r2.data(), r3.data(), factor.L.data(),
+                          factor.D_inv.data(), factor.border_solution.data(),
+                          factor.border_factor.data()));
+  EXPECT_EQ(ldlt_factor_with_status(H_data.data(), C_data.data(), G_data.data(),
+                                    s.data(), r1.data(), r2.data(), r3.data(),
+                                    factor.L.data(), factor.D_inv.data(),
+                                    factor.border_solution.data(),
+                                    factor.border_factor.data()),
             FactorStatus::kSuccess);
 
   ldlt_solve(factor.L.data(), factor.D_inv.data(),
@@ -100,8 +103,8 @@ TEST(SLACG, Test) {
   double *y_z = &y[x_dim + y_dim];
 
   slacg::test::add_Kx_to_y(H_data.data(), C_data.data(), G_data.data(),
-                           s.data(), r1, r2.data(), r3.data(),
-                           bound_diagonal.data(), x_x, x_y, x_z, y_x, y_y, y_z);
+                           s.data(), r1.data(), r2.data(), r3.data(), x_x, x_y,
+                           x_z, y_x, y_y, y_z);
 
   for (std::size_t i = 0; i < y.size(); ++i) {
     EXPECT_NEAR(y[i], 0.0, 1e-11);
@@ -117,20 +120,21 @@ TEST(SLACG, DetectsWrongInertia) {
   C_data.fill(1.0);
   G_data.fill(1.0);
   s.fill(1.0);
-  constexpr double r1 = 1e-3;
+  auto r1 = std::array<double, x_dim>{};
   auto r2 = std::array<double, y_dim>{};
   auto r3 = std::array<double, z_dim>{};
   r2.fill(1e-3);
   r3.fill(1e-3);
+  r1.fill(1e-3);
 
   FactorWorkspace factor;
 
   EXPECT_FALSE(ldlt_factor(
-      H_data.data(), C_data.data(), G_data.data(), s.data(), r1, r2.data(),
-      r3.data(), nullptr, factor.L.data(), factor.D_inv.data(),
+      H_data.data(), C_data.data(), G_data.data(), s.data(), r1.data(),
+      r2.data(), r3.data(), factor.L.data(), factor.D_inv.data(),
       factor.border_solution.data(), factor.border_factor.data()));
   EXPECT_EQ(ldlt_factor_with_status(H_data.data(), C_data.data(), G_data.data(),
-                                    s.data(), r1, r2.data(), r3.data(), nullptr,
+                                    s.data(), r1.data(), r2.data(), r3.data(),
                                     factor.L.data(), factor.D_inv.data(),
                                     factor.border_solution.data(),
                                     factor.border_factor.data()),
@@ -146,20 +150,21 @@ TEST(SLACG, DetectsNonFinitePivot) {
   C_data.fill(1.0);
   G_data.fill(1.0);
   s.fill(1.0);
-  constexpr double r1 = 1e-3;
+  auto r1 = std::array<double, x_dim>{};
   auto r2 = std::array<double, y_dim>{};
   auto r3 = std::array<double, z_dim>{};
   r2.fill(1e-3);
   r3.fill(1e-3);
+  r1.fill(1e-3);
 
   FactorWorkspace factor;
 
   EXPECT_FALSE(ldlt_factor(
-      H_data.data(), C_data.data(), G_data.data(), s.data(), r1, r2.data(),
-      r3.data(), nullptr, factor.L.data(), factor.D_inv.data(),
+      H_data.data(), C_data.data(), G_data.data(), s.data(), r1.data(),
+      r2.data(), r3.data(), factor.L.data(), factor.D_inv.data(),
       factor.border_solution.data(), factor.border_factor.data()));
   EXPECT_EQ(ldlt_factor_with_status(H_data.data(), C_data.data(), G_data.data(),
-                                    s.data(), r1, r2.data(), r3.data(), nullptr,
+                                    s.data(), r1.data(), r2.data(), r3.data(),
                                     factor.L.data(), factor.D_inv.data(),
                                     factor.border_solution.data(),
                                     factor.border_factor.data()),
@@ -175,20 +180,21 @@ TEST(SLACG, DetectsZeroPivot) {
   C_data.fill(0.0);
   G_data.fill(0.0);
   s.fill(0.0);
-  constexpr double r1 = 0.0;
+  auto r1 = std::array<double, x_dim>{};
   auto r2 = std::array<double, y_dim>{};
   auto r3 = std::array<double, z_dim>{};
   r2.fill(0.0);
   r3.fill(0.0);
+  r1.fill(0.0);
 
   FactorWorkspace factor;
 
   EXPECT_FALSE(ldlt_factor(
-      H_data.data(), C_data.data(), G_data.data(), s.data(), r1, r2.data(),
-      r3.data(), nullptr, factor.L.data(), factor.D_inv.data(),
+      H_data.data(), C_data.data(), G_data.data(), s.data(), r1.data(),
+      r2.data(), r3.data(), factor.L.data(), factor.D_inv.data(),
       factor.border_solution.data(), factor.border_factor.data()));
   EXPECT_EQ(ldlt_factor_with_status(H_data.data(), C_data.data(), G_data.data(),
-                                    s.data(), r1, r2.data(), r3.data(), nullptr,
+                                    s.data(), r1.data(), r2.data(), r3.data(),
                                     factor.L.data(), factor.D_inv.data(),
                                     factor.border_solution.data(),
                                     factor.border_factor.data()),

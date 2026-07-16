@@ -132,14 +132,13 @@ def _fused_product_implementations(
 
 # This file provides utilities for generating efficient code for solving
 # Newton-KKT linear systems of the form Kx = k, where
-# K = [[ H + r1 I_x + diag(d)      C.T           G.T      ]
-#      [         C              -diag(r2)         0       ]
-#      [         G                  0       -W - diag(r3) ]];
+# K = [[ H + diag(r1)       C.T           G.T      ]
+#      [      C         -diag(r2)          0       ]
+#      [      G              0       -W - diag(r3) ]];
 # the following properties are expected to hold:
-# 1. (H + r1 I_x) is symmetric and positive definite;
+# 1. (H + diag(r1)) is symmetric and positive definite;
 # 2. W is diagonal and positive definite;
-# 3. r1 is a non-negative regularization parameter;
-# 4. r2 and r3 are vectors of non-negative regularization parameters.
+# 3. r1, r2, and r3 are vectors of non-negative diagonal shifts.
 # For performance (i.e. reducing fill-in), the user should also pass
 # a permutation P so that an L D L^T decomposition of P_MAT @ K @ P_MAT.T
 # is performed (instead of directly on K). Note:
@@ -286,10 +285,7 @@ def kkt_codegen(
             if i < x_dim:
                 assert (j, i) in H_COORDINATE_MAP
                 if i == j:
-                    code = (
-                        f"(H_data[{H_COORDINATE_MAP[(j, i)]}] + r1 + "
-                        f"(bound_diagonal == nullptr ? 0.0 : bound_diagonal[{j}]))"
-                    )
+                    code = f"(H_data[{H_COORDINATE_MAP[(j, i)]}] + r1[{j}])"
                 else:
                     code = f"H_data[{H_COORDINATE_MAP[(j, i)]}]"
             elif i < x_dim + y_dim:
@@ -769,14 +765,14 @@ enum class FactorStatus {{
 }};
 
 // Performs an L D L^T decomposition of the matrix (P_MAT * K * P_MAT.T), where
-// K = [[ H + r1 I + diag(d)  C.T     G.T    ]
-//      [    C     -diag(r2)    0       ]
-//      [    G         0    -W - diag(r3)]],
+// K = [[ H + diag(r1)      C.T            G.T     ]
+//      [      C         -diag(r2)          0      ]
+//      [      G             0       -W - diag(r3) ]],
 // where:
 // 1. H_data is expected to represent np.triu(H) in CSC order.
 // 2. C_data and G_data are expected to represent C and G, respectively, in CSC order.
 // 3. W is a diagonal matrix, represented by the vector of its diagonal elements, w.
-// 4. d is represented by bound_diagonal; a null pointer represents the zero vector.
+// 4. r1, r2, and r3 have lengths x_dim, y_dim, and z_dim, respectively.
 // Returns kSuccess iff the computed factorization has the expected KKT inertia:
 // expected_positive_inertia positive pivots and expected_negative_inertia negative pivots.
 // NOTE: LT_data, D_inv, border_solution, and border_factor should have sizes
@@ -785,10 +781,9 @@ FactorStatus ldlt_factor_with_status(const double *SLACG_RESTRICT H_data,
                                       const double *SLACG_RESTRICT C_data,
                                       const double *SLACG_RESTRICT G_data,
                                       const double *SLACG_RESTRICT w,
-                                      const double r1,
+                                      const double *SLACG_RESTRICT r1,
                                       const double *SLACG_RESTRICT r2,
                                       const double *SLACG_RESTRICT r3,
-                                      const double *SLACG_RESTRICT bound_diagonal,
                                       double *SLACG_RESTRICT LT_data,
                                       double *SLACG_RESTRICT D_inv,
                                       double *SLACG_RESTRICT border_solution,
@@ -798,10 +793,10 @@ FactorStatus ldlt_factor_with_status(const double *SLACG_RESTRICT H_data,
 bool ldlt_factor(const double *SLACG_RESTRICT H_data,
                  const double *SLACG_RESTRICT C_data,
                  const double *SLACG_RESTRICT G_data,
-                 const double *SLACG_RESTRICT w, const double r1,
+                 const double *SLACG_RESTRICT w,
+                 const double *SLACG_RESTRICT r1,
                  const double *SLACG_RESTRICT r2,
                  const double *SLACG_RESTRICT r3,
-                 const double *SLACG_RESTRICT bound_diagonal,
                  double *SLACG_RESTRICT LT_data,
                  double *SLACG_RESTRICT D_inv,
                  double *SLACG_RESTRICT border_solution,
@@ -842,16 +837,16 @@ void add_Gx_to_y(const double *SLACG_RESTRICT G_data,
                  double *SLACG_RESTRICT y);
 
 // Adds K * x to y, where
-// K = [[ H + r1 I + diag(d)      C.T           G.T      ]
-//      [       C              -diag(r2)         0       ]
-//      [       G                  0       -W - diag(r3) ]].
+// K = [[ H + diag(r1)      C.T           G.T      ]
+//      [       C        -diag(r2)         0       ]
+//      [       G             0       -W - diag(r3) ]].
 void add_Kx_to_y(const double *SLACG_RESTRICT H_data,
                  const double *SLACG_RESTRICT C_data,
                  const double *SLACG_RESTRICT G_data,
-                 const double *SLACG_RESTRICT w, const double r1,
+                 const double *SLACG_RESTRICT w,
+                 const double *SLACG_RESTRICT r1,
                  const double *SLACG_RESTRICT r2,
                  const double *SLACG_RESTRICT r3,
-                 const double *SLACG_RESTRICT bound_diagonal,
                  const double *SLACG_RESTRICT x_x,
                  const double *SLACG_RESTRICT x_y,
                  const double *SLACG_RESTRICT x_z,
@@ -877,13 +872,9 @@ void add_Kx_to_y(const double *SLACG_RESTRICT H_data,
             ("const double *SLACG_RESTRICT C_data", "C_data"),
             ("const double *SLACG_RESTRICT G_data", "G_data"),
             ("const double *SLACG_RESTRICT w", "w"),
-            ("const double r1", "r1"),
+            ("const double *SLACG_RESTRICT r1", "r1"),
             ("const double *SLACG_RESTRICT r2", "r2"),
             ("const double *SLACG_RESTRICT r3", "r3"),
-            (
-                "const double *SLACG_RESTRICT bound_diagonal",
-                "bound_diagonal",
-            ),
             ("double *SLACG_RESTRICT LT_data", "LT_data"),
             ("double *SLACG_RESTRICT D_inv", "D_inv"),
             ("double &D_i", "D_i"),
@@ -964,10 +955,10 @@ void ldlt_solve_core(const double *SLACG_RESTRICT LT_data,
     const double *SLACG_RESTRICT H_data,
     const double *SLACG_RESTRICT C_data,
     const double *SLACG_RESTRICT G_data,
-    const double *SLACG_RESTRICT w, const double r1,
+    const double *SLACG_RESTRICT w,
+    const double *SLACG_RESTRICT r1,
     const double *SLACG_RESTRICT r2,
     const double *SLACG_RESTRICT r3,
-    const double *SLACG_RESTRICT bound_diagonal,
     double *SLACG_RESTRICT LT_data,
     double *SLACG_RESTRICT D_inv,
     double *SLACG_RESTRICT border_solution,
@@ -977,17 +968,17 @@ void ldlt_solve_core(const double *SLACG_RESTRICT LT_data,
 bool ldlt_factor(const double *SLACG_RESTRICT H_data,
                  const double *SLACG_RESTRICT C_data,
                  const double *SLACG_RESTRICT G_data,
-                 const double *SLACG_RESTRICT w, const double r1,
+                 const double *SLACG_RESTRICT w,
+                 const double *SLACG_RESTRICT r1,
                  const double *SLACG_RESTRICT r2,
                  const double *SLACG_RESTRICT r3,
-                 const double *SLACG_RESTRICT bound_diagonal,
                  double *SLACG_RESTRICT LT_data,
                  double *SLACG_RESTRICT D_inv,
                  double *SLACG_RESTRICT border_solution,
                  double *SLACG_RESTRICT border_factor) {{
     return ldlt_factor_with_status(
-               H_data, C_data, G_data, w, r1, r2, r3, bound_diagonal, LT_data,
-               D_inv, border_solution, border_factor) == FactorStatus::kSuccess;
+               H_data, C_data, G_data, w, r1, r2, r3, LT_data, D_inv,
+               border_solution, border_factor) == FactorStatus::kSuccess;
 }}"""
 
     solve_chunk_files = ()
@@ -1421,10 +1412,10 @@ void add_fused_G_chunk_{chunk_index}(const double *SLACG_RESTRICT G_data,
 void add_Kx_to_y(const double *SLACG_RESTRICT H_data,
                  const double *SLACG_RESTRICT C_data,
                  const double *SLACG_RESTRICT G_data,
-                 const double *SLACG_RESTRICT w, const double r1,
+                 const double *SLACG_RESTRICT w,
+                 const double *SLACG_RESTRICT r1,
                  const double *SLACG_RESTRICT r2,
                  const double *SLACG_RESTRICT r3,
-                 const double *SLACG_RESTRICT bound_diagonal,
                  const double *SLACG_RESTRICT x_x,
                  const double *SLACG_RESTRICT x_y,
                  const double *SLACG_RESTRICT x_z,
@@ -1436,8 +1427,7 @@ void add_Kx_to_y(const double *SLACG_RESTRICT H_data,
 {add_fused_C_calls}
 {add_fused_G_calls}
     for (int i = 0; i < {x_dim}; ++i) {{
-        y_x[i] += (r1 + (bound_diagonal == nullptr ? 0.0 : bound_diagonal[i])) *
-                  x_x[i];
+        y_x[i] += r1[i] * x_x[i];
     }}
 
     for (int i = 0; i < {y_dim}; ++i) {{
